@@ -5,10 +5,10 @@ import { ChatApp } from "@/components/chat/chat-app";
 export const Route = createFileRoute("/c/$conversationId")({
   head: () => ({
     meta: [
-      { title: "Discussion — Lumen" },
-      { name: "description", content: "Votre discussion sauvegardée avec l'assistant IA Lumen." },
-      { property: "og:title", content: "Discussion — Lumen" },
-      { property: "og:description", content: "Votre discussion sauvegardée avec l'assistant IA Lumen." },
+      { title: "Discussion — Elisée GPT" },
+      { name: "description", content: "Votre discussion sauvegardée avec l'assistant IA Elisée GPT." },
+      { property: "og:title", content: "Discussion — Elisée GPT" },
+      { property: "og:description", content: "Votre discussion sauvegardée avec l'assistant IA Elisée GPT." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

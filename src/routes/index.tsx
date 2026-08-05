@@ -5,17 +5,17 @@ import { ChatApp } from "@/components/chat/chat-app";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Lumen — votre assistant IA en français" },
+      { title: "Elisée GPT — votre assistant IA en français" },
       {
         name: "description",
         content:
-          "Discutez avec Lumen, un assistant IA en français. Connectez-vous avec Google pour sauvegarder vos discussions.",
+          "Discutez avec Elisée GPT, un assistant IA en français. Connectez-vous avec Google pour sauvegarder vos discussions.",
       },
-      { property: "og:title", content: "Lumen — votre assistant IA en français" },
+      { property: "og:title", content: "Elisée GPT — votre assistant IA en français" },
       {
         property: "og:description",
         content:
-          "Discutez avec Lumen, un assistant IA en français. Connectez-vous avec Google pour sauvegarder vos discussions.",
+          "Discutez avec Elisée GPT, un assistant IA en français. Connectez-vous avec Google pour sauvegarder vos discussions.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
