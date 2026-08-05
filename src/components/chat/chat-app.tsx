@@ -110,6 +110,32 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
 
   const ready = !conversationId || !user || history.isSuccess;
 
+  // Signed-in users always work inside a saved conversation: reuse the newest
+  // empty one, otherwise create a fresh one.
+  const bootstrapped = useRef(false);
+  useEffect(() => {
+    if (conversationId || !user || bootstrapped.current || !conversations.isSuccess) return;
+    bootstrapped.current = true;
+    void (async () => {
+      const newest = conversations.data[0];
+      if (newest) {
+        const { count } = await supabase
+          .from("messages")
+          .select("id", { count: "exact", head: true })
+          .eq("conversation_id", newest.id);
+        if (!count) {
+          void navigate({
+            to: "/c/$conversationId",
+            params: { conversationId: newest.id },
+            replace: true,
+          });
+          return;
+        }
+      }
+      createConversation.mutate();
+    })();
+  }, [conversationId, user, conversations.isSuccess, conversations.data, navigate, createConversation]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="hidden w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-3 md:flex">
