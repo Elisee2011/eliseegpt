@@ -78,9 +78,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lumen — assistant IA" },
+      { title: "Elisée GPT — assistant IA" },
       { name: "description", content: "Assistant IA conversationnel en français." },
-      { property: "og:title", content: "Lumen — assistant IA" },
+      { property: "og:title", content: "Elisée GPT — assistant IA" },
       { property: "og:description", content: "Assistant IA conversationnel en français." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

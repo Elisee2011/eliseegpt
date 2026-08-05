@@ -141,7 +141,7 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
       <aside className="hidden w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-3 md:flex">
         <div className="flex items-center gap-2 px-2 py-3">
           <Sparkles className="size-5 text-primary" />
-          <span className="font-display text-lg font-semibold tracking-tight">Lumen</span>
+          <span className="font-display text-lg font-semibold tracking-tight">Elisée GPT</span>
         </div>
 
         {user ? (
@@ -319,7 +319,7 @@ function ChatWindow({
       <header className="flex items-center justify-between border-b border-border px-5 py-3">
         <div className="flex items-center gap-2 md:hidden">
           <Sparkles className="size-4 text-primary" />
-          <span className="font-display font-semibold">Lumen</span>
+          <span className="font-display font-semibold">Elisée GPT</span>
         </div>
         <p className="ml-auto text-xs text-muted-foreground">
           {persists ? "Discussion sauvegardée sur votre compte" : "Mode invité — rien n'est sauvegardé"}
