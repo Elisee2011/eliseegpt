@@ -3,7 +3,8 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Sparkles, Trash2 } from "lucide-react";
+import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Trash2 } from "lucide-react";
+import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
 import { toast } from "sonner";
 
 import { Markdown } from "./markdown";
@@ -151,7 +152,7 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
             className="grid size-10 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
           >
             {collapsed ? (
-              <Sparkles className="size-5 text-primary" aria-hidden="true" />
+              <img src={logoMark.url} alt="Elisée GPT" className="size-6" width={24} height={24} />
             ) : (
               <PanelLeft className="size-5" aria-hidden="true" />
             )}
@@ -358,7 +359,7 @@ function ChatWindow({
     <main className="flex flex-1 flex-col">
       <header className="flex items-center justify-between border-b border-border px-5 py-3">
         <div className="flex items-center gap-2 md:hidden">
-          <Sparkles className="size-4 text-primary" />
+          <img src={logoMark.url} alt="Elisée GPT" className="size-6" width={24} height={24} />
           <span className="font-display font-semibold">Elisée GPT</span>
         </div>
         <p className="ml-auto text-xs text-muted-foreground">
