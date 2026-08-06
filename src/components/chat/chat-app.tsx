@@ -3,13 +3,12 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, LogOut, MessageSquarePlus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Markdown } from "./markdown";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 
 type ConversationRow = { id: string; title: string; updated_at: string };
@@ -92,15 +91,15 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
     onError: () => toast.error("Suppression impossible"),
   });
 
-  const signIn = async () => {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error("Connexion Google impossible");
-      return;
-    }
+  const signIn = () => {
+    void navigate({ to: "/auth" });
   };
+
+  // Spotify-style rail: picking a thread shrinks the sidebar to icons.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    if (conversationId) setCollapsed(true);
+  }, [conversationId]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -138,25 +137,47 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <aside className="hidden w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-3 md:flex">
-        <div className="flex items-center gap-2 px-2 py-3">
-          <Sparkles className="size-5 text-primary" />
-          <span className="font-display text-lg font-semibold tracking-tight">Elisée GPT</span>
+      <aside
+        className={`hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-3 transition-[width] duration-300 ease-out md:flex ${
+          collapsed ? "w-[4.5rem] items-center" : "w-72"
+        }`}
+      >
+        <div className={`flex items-center py-3 ${collapsed ? "justify-center" : "gap-2 px-2"}`}>
+          <button
+            type="button"
+            aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((value) => !value)}
+            className="grid size-10 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            {collapsed ? (
+              <Sparkles className="size-5 text-primary" aria-hidden="true" />
+            ) : (
+              <PanelLeft className="size-5" aria-hidden="true" />
+            )}
+          </button>
+          {!collapsed && (
+            <span className="truncate font-display text-lg font-semibold tracking-tight">
+              Elisée GPT
+            </span>
+          )}
         </div>
 
         {user ? (
           <>
             <Button
               variant="secondary"
-              className="mt-2 w-full justify-start gap-2"
+              className={`mt-2 gap-2 ${collapsed ? "size-11 justify-center rounded-xl p-0" : "w-full justify-start"}`}
               onClick={() => createConversation.mutate()}
               disabled={createConversation.isPending}
+              title="Nouvelle discussion"
+              aria-label="Nouvelle discussion"
             >
-              <MessageSquarePlus className="size-4" />
-              Nouvelle discussion
+              <MessageSquarePlus className="size-4" aria-hidden="true" />
+              {!collapsed && "Nouvelle discussion"}
             </Button>
 
-            <div className="mt-4 flex-1 space-y-1 overflow-y-auto">
+            <div className="mt-4 w-full flex-1 space-y-1 overflow-y-auto">
               {(conversations.data ?? []).map((conversation) => (
                 <div
                   key={conversation.id}
@@ -164,52 +185,71 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
                     conversation.id === conversationId
                       ? "bg-sidebar-accent"
                       : "hover:bg-sidebar-accent/60"
-                  }`}
+                  } ${collapsed ? "justify-center" : ""}`}
                 >
                   <Link
                     to="/c/$conversationId"
                     params={{ conversationId: conversation.id }}
-                    className="flex-1 truncate px-2 py-2 text-sm text-sidebar-foreground"
+                    title={conversation.title}
+                    className={`text-sm text-sidebar-foreground ${
+                      collapsed
+                        ? "grid size-11 place-items-center font-semibold uppercase"
+                        : "flex-1 truncate px-2 py-2"
+                    }`}
                   >
-                    {conversation.title}
+                    {collapsed ? conversation.title.trim().charAt(0) || "•" : conversation.title}
                   </Link>
-                  <button
-                    type="button"
-                    aria-label="Supprimer la discussion"
-                    onClick={() => deleteConversation.mutate(conversation.id)}
-                    className="rounded-lg p-2 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  {!collapsed && (
+                    <button
+                      type="button"
+                      aria-label="Supprimer la discussion"
+                      onClick={() => deleteConversation.mutate(conversation.id)}
+                      className="rounded-lg p-2 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               ))}
-              {conversations.isSuccess && conversations.data.length === 0 && (
+              {!collapsed && conversations.isSuccess && conversations.data.length === 0 && (
                 <p className="px-2 py-4 text-xs text-muted-foreground">
                   Vos discussions sauvegardées apparaîtront ici.
                 </p>
               )}
             </div>
 
-            <div className="border-t border-sidebar-border pt-3">
-              <p className="truncate px-2 text-xs text-muted-foreground">{user.email}</p>
+            <div className="w-full border-t border-sidebar-border pt-3">
+              {!collapsed && (
+                <p className="truncate px-2 text-xs text-muted-foreground">{user.email}</p>
+              )}
               <Button
                 variant="ghost"
-                className="mt-1 w-full justify-start gap-2 text-sm"
+                className={`mt-1 gap-2 text-sm ${collapsed ? "size-11 justify-center p-0" : "w-full justify-start"}`}
                 onClick={signOut}
+                title="Se déconnecter"
+                aria-label="Se déconnecter"
               >
-                <LogOut className="size-4" />
-                Se déconnecter
+                <LogOut className="size-4" aria-hidden="true" />
+                {!collapsed && "Se déconnecter"}
               </Button>
             </div>
           </>
         ) : (
-          <div className="mt-4 flex flex-1 flex-col justify-between">
-            <p className="px-2 text-sm leading-relaxed text-muted-foreground">
-              Connectez-vous avec Google pour sauvegarder vos discussions. Sans compte, rien
-              n&apos;est enregistré.
-            </p>
-            <Button className="w-full" onClick={signIn} disabled={loading}>
-              Continuer avec Google
+          <div className="mt-4 flex w-full flex-1 flex-col justify-between">
+            {!collapsed && (
+              <p className="px-2 text-sm leading-relaxed text-muted-foreground">
+                Connectez-vous avec Google pour sauvegarder vos discussions. Sans compte, rien
+                n&apos;est enregistré.
+              </p>
+            )}
+            <Button
+              className={`${collapsed ? "size-11 justify-center p-0" : "w-full"}`}
+              onClick={signIn}
+              disabled={loading}
+              title="Continuer avec Google"
+              aria-label="Continuer avec Google"
+            >
+              {collapsed ? <LogOut className="size-4 rotate-180" aria-hidden="true" /> : "Continuer avec Google"}
             </Button>
           </div>
         )}
