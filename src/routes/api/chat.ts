@@ -1,12 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
-
-import {
-  createRunIdFetch,
-  getRunIdFromRequest,
-  runIdResponseHeaders,
-} from "@/lib/ai-gateway.server";
 
 const SYSTEM_PROMPT = `Tu es Elisée GPT, un assistant IA francophone.
 
@@ -23,48 +17,40 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = (await request.json()) as { messages?: unknown };
+        const body = (await request.json()) as {
+          messages?: unknown;
+          userPreferences?: string;
+        };
         if (!Array.isArray(body.messages)) {
           return new Response("Messages requis", { status: 400 });
         }
 
-        const apiKey = process.env["LOVABLE_API_KEY"];
+        const apiKey = process.env["ANTHROPIC_API_KEY"];
         if (!apiKey) {
-          return new Response("LOVABLE_API_KEY manquante", { status: 500 });
+          return new Response("Clé API IA manquante", { status: 500 });
         }
 
-        const initialRunId = getRunIdFromRequest(request);
-        const runIdFetch = createRunIdFetch(initialRunId);
-        const lovable = createOpenAI({
-          baseURL: "https://ai.gateway.lovable.dev/v1",
+        const baseURL = process.env["ANTHROPIC_BASE_URL"];
+        const anthropic = createAnthropic({
           apiKey,
-          headers: {
-            "Lovable-API-Key": apiKey,
-            "X-Lovable-AIG-SDK": "vercel-ai-sdk",
-          },
-          fetch: runIdFetch.fetch as unknown as typeof fetch,
+          ...(baseURL ? { baseURL } : {}),
         });
 
         const messages = body.messages as UIMessage[];
+
+        let systemPrompt = SYSTEM_PROMPT;
+        if (body.userPreferences) {
+          systemPrompt += `\n\nProfil et habitudes de l'utilisateur — adapte ton ton, ton niveau de détail et tes exemples à ce profil :\n${body.userPreferences}`;
+        }
+
         const result = streamText({
-          model: lovable.responses("openai/gpt-5.6-sol"),
-          system: SYSTEM_PROMPT,
+          model: anthropic("claude-haiku-4-5-20251001"),
+          system: systemPrompt,
           messages: await convertToModelMessages(messages),
-          providerOptions: {
-            openai: {
-              forceReasoning: true,
-              reasoningEffort: "low",
-              reasoningSummary: "auto",
-              store: false,
-              include: ["reasoning.encrypted_content"],
-            },
-          },
         });
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
-          sendReasoning: true,
-          headers: runIdResponseHeaders(initialRunId),
         });
       },
     },

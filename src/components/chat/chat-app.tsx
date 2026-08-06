@@ -61,12 +61,25 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
     },
   });
 
+  const preferences = useQuery({
+    queryKey: ["user-preferences", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_preferences")
+        .select("preferences")
+        .maybeSingle();
+      if (error) throw error;
+      return data?.preferences ?? "";
+    },
+  });
+
   const createConversation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("Non connecté");
       const { data, error } = await supabase
         .from("conversations")
-        .insert({ user_id: user.id })
+        .insert({})
         .select("id")
         .single();
       if (error) throw error;
@@ -96,7 +109,6 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
     void navigate({ to: "/auth" });
   };
 
-  // Spotify-style rail: picking a thread shrinks the sidebar to icons.
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     if (conversationId) setCollapsed(true);
@@ -110,8 +122,6 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
 
   const ready = !conversationId || !user || history.isSuccess;
 
-  // Signed-in users always work inside a saved conversation: reuse the newest
-  // empty one, otherwise create a fresh one.
   const bootstrapped = useRef(false);
   useEffect(() => {
     if (conversationId || !user || bootstrapped.current || !conversations.isSuccess) return;
@@ -239,18 +249,18 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
           <div className="mt-4 flex w-full flex-1 flex-col justify-between">
             {!collapsed && (
               <p className="px-2 text-sm leading-relaxed text-muted-foreground">
-                Connectez-vous avec Google pour sauvegarder vos discussions. Sans compte, rien
-                n&apos;est enregistré.
+                Connectez-vous pour sauvegarder vos discussions et obtenir un assistant qui
+                s&apos;adapte à vos habitudes.
               </p>
             )}
             <Button
               className={`${collapsed ? "size-11 justify-center p-0" : "w-full"}`}
               onClick={signIn}
               disabled={loading}
-              title="Continuer avec Google"
-              aria-label="Continuer avec Google"
+              title="Se connecter"
+              aria-label="Se connecter"
             >
-              {collapsed ? <LogOut className="size-4 rotate-180" aria-hidden="true" /> : "Continuer avec Google"}
+              {collapsed ? <LogOut className="size-4 rotate-180" aria-hidden="true" /> : "Se connecter"}
             </Button>
           </div>
         )}
@@ -262,6 +272,7 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
           conversationId={conversationId}
           userId={user?.id ?? null}
           initialMessages={history.data ?? []}
+          userPreferences={preferences.data ?? ""}
           onPersisted={() => {
             void queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
           }}
@@ -280,19 +291,28 @@ function ChatWindow({
   conversationId,
   userId,
   initialMessages,
+  userPreferences,
   onPersisted,
   onSignIn,
 }: {
   conversationId: string | null;
   userId: string | null;
   initialMessages: UIMessage[];
+  userPreferences: string;
   onPersisted: () => void;
   onSignIn: () => void;
 }) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const transport = useMemo(() => new DefaultChatTransport({ api: "/api/chat" }), []);
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        ...(userPreferences ? { body: { userPreferences } } : {}),
+      }),
+    [userPreferences],
+  );
 
   const saves = useRef(false);
   const persists = !!conversationId && !!userId;
@@ -310,7 +330,6 @@ function ChatWindow({
         .from("messages")
         .insert({
           conversation_id: conversationId!,
-          user_id: userId!,
           role: "assistant",
           content,
         })
@@ -340,7 +359,7 @@ function ChatWindow({
     if (!persists) return;
     const { error } = await supabase
       .from("messages")
-      .insert({ conversation_id: conversationId!, user_id: userId!, role: "user", content: text });
+      .insert({ conversation_id: conversationId!, role: "user", content: text });
     if (error) {
       toast.error("Votre message n'a pas pu être sauvegardé");
       return;
@@ -363,7 +382,9 @@ function ChatWindow({
           <span className="font-display font-semibold">Elisée GPT</span>
         </div>
         <p className="ml-auto text-xs text-muted-foreground">
-          {persists ? "Discussion sauvegardée sur votre compte" : "Mode invité — rien n'est sauvegardé"}
+          {persists
+            ? "Discussion sauvegardée sur votre compte"
+            : "Mode invité — rien n'est sauvegardé"}
         </p>
       </header>
 
@@ -381,7 +402,7 @@ function ChatWindow({
                   onClick={onSignIn}
                   className="mt-5 text-sm text-primary underline underline-offset-4"
                 >
-                  Se connecter avec Google pour garder l&apos;historique
+                  Se connecter pour garder l&apos;historique et personnaliser l&apos;assistant
                 </button>
               )}
             </div>
@@ -389,11 +410,6 @@ function ChatWindow({
 
           {messages.map((message) => {
             const text = textOf(message);
-            const reasoning = message.parts
-              .filter((part) => part.type === "reasoning")
-              .map((part) => ("text" in part ? part.text : ""))
-              .join("\n")
-              .trim();
 
             if (message.role === "user") {
               return (
@@ -407,12 +423,6 @@ function ChatWindow({
 
             return (
               <div key={message.id} className="space-y-2">
-                {reasoning && (
-                  <details className="rounded-2xl bg-card/60 px-4 py-2 text-xs text-muted-foreground">
-                    <summary className="cursor-pointer select-none">Raisonnement</summary>
-                    <p className="mt-2 whitespace-pre-wrap">{reasoning}</p>
-                  </details>
-                )}
                 {text && <Markdown>{text}</Markdown>}
               </div>
             );
@@ -451,7 +461,12 @@ function ChatWindow({
             placeholder="Écrivez votre message…"
             className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <Button type="submit" size="icon" className="size-10 shrink-0 rounded-full" disabled={busy || !input.trim()}>
+          <Button
+            type="submit"
+            size="icon"
+            className="size-10 shrink-0 rounded-full"
+            disabled={busy || !input.trim()}
+          >
             <ArrowUp className="size-4" />
           </Button>
         </form>
