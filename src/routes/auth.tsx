@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import logoFull from "@/assets/elisee-gpt-logo.png.asset.json";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -54,10 +55,13 @@ function AuthPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-8 shadow-2xl">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-5 text-primary" aria-hidden="true" />
-          <span className="font-display text-lg font-semibold tracking-tight">Elisée GPT</span>
-        </div>
+        <img
+          src={logoFull.url}
+          alt="Logo Elisée GPT"
+          className="h-20 w-auto"
+          width={160}
+          height={160}
+        />
 
         <h1 className="mt-6 text-2xl font-semibold">Connexion</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
