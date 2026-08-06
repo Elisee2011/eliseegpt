@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Trash2 } from "lucide-react";
 import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
 import { toast } from "sonner";
@@ -12,7 +11,38 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
-type ConversationRow = { id: string; title: string; updated_at: string };
+type Conversation = {
+  id: string;
+  title: string;
+  messages: UIMessage[];
+  updatedAt: number;
+};
+
+const STORAGE_KEY = "elisee-gpt-conversations";
+
+function loadConversations(): Conversation[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Conversation[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(conversations: Conversation[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  } catch {
+    // storage full or unavailable — silently ignore
+  }
+}
+
+function uid() {
+  return crypto.randomUUID();
+}
 
 function textOf(message: UIMessage) {
   return message.parts
@@ -21,130 +51,87 @@ function textOf(message: UIMessage) {
     .trim();
 }
 
-function toUIMessage(row: { id: string; role: string; content: string }): UIMessage {
-  return {
-    id: row.id,
-    role: row.role === "assistant" ? "assistant" : "user",
-    parts: [{ type: "text", text: row.content }],
-  };
-}
-
 export function ChatApp({ conversationId }: { conversationId: string | null }) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
-  const conversations = useQuery({
-    queryKey: ["conversations", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("conversations")
-        .select("id, title, updated_at")
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as ConversationRow[];
-    },
-  });
-
-  const history = useQuery({
-    queryKey: ["messages", conversationId],
-    enabled: !!user && !!conversationId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("id, role, content")
-        .eq("conversation_id", conversationId!)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []).map(toUIMessage);
-    },
-  });
-
-  const preferences = useQuery({
-    queryKey: ["user-preferences", user?.id],
-    enabled: !!user,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_preferences")
-        .select("preferences")
-        .maybeSingle();
-      if (error) throw error;
-      return data?.preferences ?? "";
-    },
-  });
-
-  const createConversation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("Non connecté");
-      const { data, error } = await supabase
-        .from("conversations")
-        .insert({})
-        .select("id")
-        .single();
-      if (error) throw error;
-      return data.id as string;
-    },
-    onSuccess: (id) => {
-      void queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
-      void navigate({ to: "/c/$conversationId", params: { conversationId: id } });
-    },
-    onError: () => toast.error("Impossible de créer la discussion"),
-  });
-
-  const deleteConversation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("conversations").delete().eq("id", id);
-      if (error) throw error;
-      return id;
-    },
-    onSuccess: (id) => {
-      void queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
-      if (id === conversationId) void navigate({ to: "/" });
-    },
-    onError: () => toast.error("Suppression impossible"),
-  });
-
-  const signIn = () => {
-    void navigate({ to: "/auth" });
-  };
-
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setConversations(loadConversations());
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) saveConversations(conversations);
+  }, [conversations, hydrated]);
+
   useEffect(() => {
     if (conversationId) setCollapsed(true);
   }, [conversationId]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    void queryClient.clear();
     void navigate({ to: "/" });
   };
 
-  const ready = !conversationId || !user || history.isSuccess;
+  const signIn = () => {
+    void navigate({ to: "/auth" });
+  };
 
-  const bootstrapped = useRef(false);
+  const createConversation = useCallback(() => {
+    const id = uid();
+    const conversation: Conversation = {
+      id,
+      title: "Nouvelle discussion",
+      messages: [],
+      updatedAt: Date.now(),
+    };
+    setConversations((prev) => [conversation, ...prev]);
+    void navigate({ to: "/c/$conversationId", params: { conversationId: id } });
+    return id;
+  }, [navigate]);
+
+  const deleteConversation = useCallback(
+    (id: string) => {
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (id === conversationId) void navigate({ to: "/" });
+    },
+    [conversationId, navigate],
+  );
+
+  const updateConversation = useCallback((id: string, updater: (c: Conversation) => Conversation) => {
+    setConversations((prev) => prev.map((c) => (c.id === id ? updater(c) : c)));
+  }, []);
+
+  // Auto-create a conversation on first visit (guest mode)
   useEffect(() => {
-    if (conversationId || !user || bootstrapped.current || !conversations.isSuccess) return;
-    bootstrapped.current = true;
-    void (async () => {
-      const newest = conversations.data[0];
-      if (newest) {
-        const { count } = await supabase
-          .from("messages")
-          .select("id", { count: "exact", head: true })
-          .eq("conversation_id", newest.id);
-        if (!count) {
-          void navigate({
-            to: "/c/$conversationId",
-            params: { conversationId: newest.id },
-            replace: true,
-          });
-          return;
-        }
+    if (!hydrated || conversationId) return;
+    if (conversations.length === 0) {
+      createConversation();
+    } else {
+      const first = conversations[0];
+      if (first) {
+        void navigate({
+          to: "/c/$conversationId",
+          params: { conversationId: first.id },
+          replace: true,
+        });
       }
-      createConversation.mutate();
-    })();
-  }, [conversationId, user, conversations.isSuccess, conversations.data, navigate, createConversation]);
+    }
+  }, [hydrated, conversationId, conversations.length, createConversation, navigate]);
+
+  const current = conversations.find((c) => c.id === conversationId) ?? null;
+
+  if (!hydrated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Chargement…
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -174,62 +161,61 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
           )}
         </div>
 
-        {user ? (
-          <>
-            <Button
-              variant="secondary"
-              className={`mt-2 gap-2 ${collapsed ? "size-11 justify-center rounded-xl p-0" : "w-full justify-start"}`}
-              onClick={() => createConversation.mutate()}
-              disabled={createConversation.isPending}
-              title="Nouvelle discussion"
-              aria-label="Nouvelle discussion"
-            >
-              <MessageSquarePlus className="size-4" aria-hidden="true" />
-              {!collapsed && "Nouvelle discussion"}
-            </Button>
+        <Button
+          variant="secondary"
+          className={`mt-2 gap-2 ${collapsed ? "size-11 justify-center rounded-xl p-0" : "w-full justify-start"}`}
+          onClick={() => createConversation()}
+          title="Nouvelle discussion"
+          aria-label="Nouvelle discussion"
+        >
+          <MessageSquarePlus className="size-4" aria-hidden="true" />
+          {!collapsed && "Nouvelle discussion"}
+        </Button>
 
-            <div className="mt-4 w-full flex-1 space-y-1 overflow-y-auto">
-              {(conversations.data ?? []).map((conversation) => (
-                <div
-                  key={conversation.id}
-                  className={`group flex items-center gap-1 rounded-xl px-1 transition-colors ${
-                    conversation.id === conversationId
-                      ? "bg-sidebar-accent"
-                      : "hover:bg-sidebar-accent/60"
-                  } ${collapsed ? "justify-center" : ""}`}
+        <div className="mt-4 w-full flex-1 space-y-1 overflow-y-auto">
+          {conversations.map((conversation) => (
+            <div
+              key={conversation.id}
+              className={`group flex items-center gap-1 rounded-xl px-1 transition-colors ${
+                conversation.id === conversationId
+                  ? "bg-sidebar-accent"
+                  : "hover:bg-sidebar-accent/60"
+              } ${collapsed ? "justify-center" : ""}`}
+            >
+              <Link
+                to="/c/$conversationId"
+                params={{ conversationId: conversation.id }}
+                title={conversation.title}
+                className={`text-sm text-sidebar-foreground ${
+                  collapsed
+                    ? "grid size-11 place-items-center font-semibold uppercase"
+                    : "flex-1 truncate px-2 py-2"
+                }`}
+              >
+                {collapsed ? conversation.title.trim().charAt(0) || "•" : conversation.title}
+              </Link>
+              {!collapsed && (
+                <button
+                  type="button"
+                  aria-label="Supprimer la discussion"
+                  onClick={() => deleteConversation(conversation.id)}
+                  className="rounded-lg p-2 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
                 >
-                  <Link
-                    to="/c/$conversationId"
-                    params={{ conversationId: conversation.id }}
-                    title={conversation.title}
-                    className={`text-sm text-sidebar-foreground ${
-                      collapsed
-                        ? "grid size-11 place-items-center font-semibold uppercase"
-                        : "flex-1 truncate px-2 py-2"
-                    }`}
-                  >
-                    {collapsed ? conversation.title.trim().charAt(0) || "•" : conversation.title}
-                  </Link>
-                  {!collapsed && (
-                    <button
-                      type="button"
-                      aria-label="Supprimer la discussion"
-                      onClick={() => deleteConversation.mutate(conversation.id)}
-                      className="rounded-lg p-2 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {!collapsed && conversations.isSuccess && conversations.data.length === 0 && (
-                <p className="px-2 py-4 text-xs text-muted-foreground">
-                  Vos discussions sauvegardées apparaîtront ici.
-                </p>
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </button>
               )}
             </div>
+          ))}
+          {!collapsed && conversations.length === 0 && (
+            <p className="px-2 py-4 text-xs text-muted-foreground">
+              Vos discussions apparaîtront ici.
+            </p>
+          )}
+        </div>
 
-            <div className="w-full border-t border-sidebar-border pt-3">
+        <div className="w-full border-t border-sidebar-border pt-3">
+          {user ? (
+            <>
               {!collapsed && (
                 <p className="truncate px-2 text-xs text-muted-foreground">{user.email}</p>
               )}
@@ -243,16 +229,8 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
                 <LogOut className="size-4" aria-hidden="true" />
                 {!collapsed && "Se déconnecter"}
               </Button>
-            </div>
-          </>
-        ) : (
-          <div className="mt-4 flex w-full flex-1 flex-col justify-between">
-            {!collapsed && (
-              <p className="px-2 text-sm leading-relaxed text-muted-foreground">
-                Connectez-vous pour sauvegarder vos discussions et obtenir un assistant qui
-                s&apos;adapte à vos habitudes.
-              </p>
-            )}
+            </>
+          ) : (
             <Button
               className={`${collapsed ? "size-11 justify-center p-0" : "w-full"}`}
               onClick={signIn}
@@ -262,83 +240,71 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
             >
               {collapsed ? <LogOut className="size-4 rotate-180" aria-hidden="true" /> : "Se connecter"}
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </aside>
 
-      {ready ? (
-        <ChatWindow
-          key={conversationId ?? "guest"}
-          conversationId={conversationId}
-          userId={user?.id ?? null}
-          initialMessages={history.data ?? []}
-          userPreferences={preferences.data ?? ""}
-          onPersisted={() => {
-            void queryClient.invalidateQueries({ queryKey: ["conversations", user?.id] });
-          }}
-          onSignIn={signIn}
-        />
-      ) : (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Chargement…
-        </div>
-      )}
+      <ChatWindow
+        key={conversationId ?? "guest"}
+        conversationId={conversationId}
+        initialMessages={current?.messages ?? []}
+        onMessagesChange={(messages) => {
+          if (!conversationId) return;
+          updateConversation(conversationId, (c) => ({
+            ...c,
+            messages,
+            updatedAt: Date.now(),
+            title:
+              messages.length > 0 && c.title === "Nouvelle discussion"
+                ? textOf(messages[0]!).slice(0, 60) || c.title
+                : c.title,
+          }));
+        }}
+        onSignIn={signIn}
+      />
     </div>
   );
 }
 
 function ChatWindow({
   conversationId,
-  userId,
   initialMessages,
-  userPreferences,
-  onPersisted,
+  onMessagesChange,
   onSignIn,
 }: {
   conversationId: string | null;
-  userId: string | null;
   initialMessages: UIMessage[];
-  userPreferences: string;
-  onPersisted: () => void;
+  onMessagesChange: (messages: UIMessage[]) => void;
   onSignIn: () => void;
 }) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        ...(userPreferences ? { body: { userPreferences } } : {}),
       }),
-    [userPreferences],
+    [],
   );
-
-  const saves = useRef(false);
-  const persists = !!conversationId && !!userId;
 
   const { messages, sendMessage, status } = useChat({
     id: conversationId ?? "guest",
     messages: initialMessages,
     transport,
     onError: () => toast.error("La réponse de l'IA a échoué. Réessayez."),
-    onFinish: ({ message }) => {
-      if (!persists) return;
-      const content = textOf(message);
-      if (!content) return;
-      void supabase
-        .from("messages")
-        .insert({
-          conversation_id: conversationId!,
-          role: "assistant",
-          content,
-        })
-        .then(({ error }) => {
-          if (error) toast.error("La réponse n'a pas pu être sauvegardée");
-          else onPersisted();
-        });
+    onFinish: () => {
+      // messages is up-to-date at this point; we sync in the effect below
     },
   });
+
+  // Sync messages back to parent whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      onMessagesChange(messages);
+    }
+  }, [messages, onMessagesChange]);
 
   const busy = status === "submitted" || status === "streaming";
 
@@ -350,28 +316,11 @@ function ChatWindow({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, status]);
 
-  const submit = async () => {
+  const submit = () => {
     const text = input.trim();
     if (!text || busy) return;
     setInput("");
     void sendMessage({ text });
-
-    if (!persists) return;
-    const { error } = await supabase
-      .from("messages")
-      .insert({ conversation_id: conversationId!, role: "user", content: text });
-    if (error) {
-      toast.error("Votre message n'a pas pu être sauvegardé");
-      return;
-    }
-    if (!saves.current && messages.length === 0) {
-      saves.current = true;
-      await supabase
-        .from("conversations")
-        .update({ title: text.slice(0, 60) })
-        .eq("id", conversationId!);
-    }
-    onPersisted();
   };
 
   return (
@@ -382,9 +331,7 @@ function ChatWindow({
           <span className="font-display font-semibold">Elisée GPT</span>
         </div>
         <p className="ml-auto text-xs text-muted-foreground">
-          {persists
-            ? "Discussion sauvegardée sur votre compte"
-            : "Mode invité — rien n'est sauvegardé"}
+          Discussions sauvegardées sur cet appareil
         </p>
       </header>
 
@@ -396,13 +343,13 @@ function ChatWindow({
               <p className="mt-3 text-sm text-muted-foreground">
                 Posez une question, demandez un résumé, du code, une idée…
               </p>
-              {!persists && (
+              {!conversationId && (
                 <button
                   type="button"
                   onClick={onSignIn}
                   className="mt-5 text-sm text-primary underline underline-offset-4"
                 >
-                  Se connecter pour garder l&apos;historique et personnaliser l&apos;assistant
+                  Se connecter pour synchroniser vos discussions
                 </button>
               )}
             </div>
@@ -444,7 +391,7 @@ function ChatWindow({
           className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-3xl border border-border bg-card p-2 shadow-lg"
           onSubmit={(event) => {
             event.preventDefault();
-            void submit();
+            submit();
           }}
         >
           <textarea
@@ -455,7 +402,7 @@ function ChatWindow({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                void submit();
+                submit();
               }
             }}
             placeholder="Écrivez votre message…"
