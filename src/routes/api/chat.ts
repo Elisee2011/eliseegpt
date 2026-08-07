@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 
 const SYSTEM_PROMPT = `Tu es Elisée GPT, un assistant IA francophone.
@@ -25,15 +25,14 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Messages requis", { status: 400 });
         }
 
-        const apiKey = process.env["ANTHROPIC_API_KEY"];
+        const apiKey = process.env["LOVABLE_API_KEY"];
         if (!apiKey) {
           return new Response("Clé API IA manquante", { status: 500 });
         }
 
-        const baseURL = process.env["ANTHROPIC_BASE_URL"];
-        const anthropic = createAnthropic({
+        const gateway = createOpenAI({
           apiKey,
-          ...(baseURL ? { baseURL } : {}),
+          baseURL: "https://ai.gateway.lovable.dev/v1",
         });
 
         const messages = body.messages as UIMessage[];
@@ -44,9 +43,12 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const result = streamText({
-          model: anthropic("claude-haiku-4-5-20251001"),
+          model: gateway.chat("google/gemini-2.5-flash"),
           system: systemPrompt,
           messages: await convertToModelMessages(messages),
+          onError: ({ error }) => {
+            console.error("[chat] streamText error:", error);
+          },
         });
 
         return result.toUIMessageStreamResponse({
