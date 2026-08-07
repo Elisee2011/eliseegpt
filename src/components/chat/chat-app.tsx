@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 import { Markdown } from "./markdown";
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
+import { getSupabase } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 
 type Conversation = {
@@ -73,7 +73,7 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
   }, [conversationId]);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await getSupabase()?.auth.signOut();
     void navigate({ to: "/" });
   };
 
