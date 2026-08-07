@@ -27,7 +27,7 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
-          user_id?: string
+          user_id: string
         }
         Update: {
           created_at?: string
@@ -53,7 +53,7 @@ export type Database = {
           created_at?: string
           id?: string
           role: string
-          user_id?: string
+          user_id: string
         }
         Update: {
           content?: string
@@ -72,30 +72,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      user_preferences: {
-        Row: {
-          id: string
-          user_id: string
-          preferences: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id?: string
-          preferences?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          preferences?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
       }
     }
     Views: {
