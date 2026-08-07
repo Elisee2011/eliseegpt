@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
 import { lovable } from "@/integrations/lovable/index";
-import { supabase } from "@/integrations/supabase/client";
+import { getSupabase, isAuthConfigured } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +53,8 @@ function AuthPage() {
     }
     setPending(true);
     try {
+      const supabase = getSupabase();
+      if (!supabase) throw new Error("La connexion n'est pas disponible sur ce déploiement.");
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email: email.trim(), password });
         if (error) throw error;
@@ -74,6 +76,10 @@ function AuthPage() {
   };
 
   const signInGoogle = async () => {
+    if (!isAuthConfigured()) {
+      toast.error("La connexion n'est pas disponible sur ce déploiement.");
+      return;
+    }
     setPending(true);
     try {
       const result = await lovable.auth.signInWithOAuth("google", {
