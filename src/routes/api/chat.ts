@@ -46,6 +46,9 @@ export const Route = createFileRoute("/api/chat")({
           model: gateway("google/gemini-2.5-flash"),
           system: systemPrompt,
           messages: await convertToModelMessages(messages),
+          onError: ({ error }) => {
+            console.error("[chat] streamText error:", error);
+          },
         });
 
         return result.toUIMessageStreamResponse({
