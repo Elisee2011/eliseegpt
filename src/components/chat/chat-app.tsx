@@ -280,6 +280,9 @@ function ChatWindow({
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const onMessagesChangeRef = useRef(onMessagesChange);
+  onMessagesChangeRef.current = onMessagesChange;
+  const lastSyncedRef = useRef<string>("");
 
   const transport = useMemo(
     () =>
@@ -301,10 +304,12 @@ function ChatWindow({
 
   // Sync messages back to parent whenever they change
   useEffect(() => {
-    if (messages.length > 0) {
-      onMessagesChange(messages);
-    }
-  }, [messages, onMessagesChange]);
+    if (messages.length === 0) return;
+    const signature = JSON.stringify(messages);
+    if (signature === lastSyncedRef.current) return;
+    lastSyncedRef.current = signature;
+    onMessagesChangeRef.current(messages);
+  }, [messages]);
 
   const busy = status === "submitted" || status === "streaming";
 
