@@ -298,7 +298,9 @@ function ChatWindow({
   onSignIn: () => void;
 }) {
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const onMessagesChangeRef = useRef(onMessagesChange);
   onMessagesChangeRef.current = onMessagesChange;
@@ -346,9 +348,40 @@ function ChatWindow({
 
   const submit = () => {
     const text = input.trim();
-    if (!text || busy) return;
+    if ((!text && attachments.length === 0) || busy) return;
     setInput("");
-    void sendMessage({ text });
+    const files = attachments.map((attachment) => ({
+      type: "file" as const,
+      mediaType: attachment.mediaType,
+      filename: attachment.name,
+      url: attachment.url,
+    }));
+    setAttachments([]);
+    void sendMessage({ text, files });
+  };
+
+  const addFiles = async (files: FileList | File[] | null) => {
+    if (!files) return;
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    const next: Attachment[] = [];
+    for (const file of images) {
+      if (file.size > MAX_IMAGE_BYTES) {
+        toast.error(`${file.name} dépasse 5 Mo.`);
+        continue;
+      }
+      try {
+        next.push({
+          id: uid(),
+          name: file.name || "image.png",
+          mediaType: file.type,
+          url: await readAsDataUrl(file),
+        });
+      } catch {
+        toast.error(`Impossible de lire ${file.name}.`);
+      }
+    }
+    if (next.length > 0) setAttachments((prev) => [...prev, ...next].slice(0, 6));
   };
 
   return (
