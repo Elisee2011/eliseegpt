@@ -2,16 +2,21 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createOpenAI } from "@ai-sdk/openai";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 
+import { createRunIdFetch, getRunIdFromRequest } from "@/lib/ai-gateway.server";
+
 const SYSTEM_PROMPT = `Tu es Elisée GPT, un assistant IA francophone.
 
-Style de réponse — non négociable :
-- Bref et direct. Va droit au but, pas d'introduction, pas de reformulation de la question, pas de conclusion inutile.
-- Mais complet : n'omets aucun élément essentiel de la réponse. Concision ≠ réponse partielle.
-- Privilégie les listes à puces courtes et les phrases courtes. Une idée par puce.
-- Pas de politesses ni de remplissage ("Bien sûr", "Excellente question", "J'espère que cela aide").
-- Code : donne le code, avec au plus une ou deux lignes d'explication.
-- Réponds dans la langue de l'utilisateur. Markdown quand c'est utile.
-- Si tu n'es pas sûr, dis-le en une phrase.`;
+Style de réponse :
+- Sois amical, naturel et encourageant, comme un assistant compétent avec qui il est agréable de discuter.
+- Réponds de façon claire et assez développée pour traiter tous les points importants. Ne sacrifie jamais une information utile pour être bref.
+- Reste direct : évite les longues introductions, les répétitions et les conclusions artificielles.
+- Structure avec des paragraphes courts et des listes quand cela améliore la lecture.
+- Utilise parfois ces emojis, uniquement lorsqu'ils correspondent vraiment au ton ou à la situation : 🤣 😭 😒 😎 😝 😱 😶. N'en mets pas dans chaque réponse et n'en empile pas plusieurs sans raison.
+- Code : donne une solution complète, puis explique brièvement les décisions importantes.
+- Réponds dans la langue de l'utilisateur. Utilise Markdown quand c'est utile.
+- Si tu n'es pas sûr, dis-le clairement et propose la meilleure façon de vérifier.`;
+
+const FALLBACK_CHAT_URL = "https://eliseegpt.lovable.app/api/chat";
 
 export const Route = createFileRoute("/api/chat")({
   server: {
@@ -27,12 +32,39 @@ export const Route = createFileRoute("/api/chat")({
 
         const apiKey = process.env["LOVABLE_API_KEY"];
         if (!apiKey) {
-          return new Response("Clé API IA manquante", { status: 500 });
+          if (request.headers.get("X-Elisee-Proxy") === "1") {
+            return new Response("Service IA temporairement indisponible", { status: 503 });
+          }
+
+          const response = await fetch(FALLBACK_CHAT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Elisee-Proxy": "1",
+            },
+            body: JSON.stringify(body),
+          });
+
+          return new Response(response.body, {
+            status: response.status,
+            statusText: response.statusText,
+            headers: {
+              "Content-Type": response.headers.get("Content-Type") ?? "text/event-stream",
+              "Cache-Control": "no-cache",
+            },
+          });
         }
 
+        const initialRunId = getRunIdFromRequest(request);
+        const runIdFetch = createRunIdFetch(initialRunId);
         const gateway = createOpenAI({
           apiKey,
           baseURL: "https://ai.gateway.lovable.dev/v1",
+          headers: {
+            "Lovable-API-Key": apiKey,
+            "X-Lovable-AIG-SDK": "vercel-ai-sdk",
+          },
+          fetch: runIdFetch.fetch,
         });
 
         const messages = body.messages as UIMessage[];
@@ -43,9 +75,18 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const result = streamText({
-          model: gateway.chat("google/gemini-2.5-flash"),
+          model: gateway.responses("openai/gpt-5.6-sol"),
           system: systemPrompt,
           messages: await convertToModelMessages(messages),
+          providerOptions: {
+            openai: {
+              forceReasoning: true,
+              reasoningEffort: "medium",
+              reasoningSummary: "auto",
+              store: false,
+              include: ["reasoning.encrypted_content"],
+            },
+          },
           onError: ({ error }) => {
             console.error("[chat] streamText error:", error);
           },
@@ -53,6 +94,7 @@ export const Route = createFileRoute("/api/chat")({
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages,
+          sendReasoning: true,
         });
       },
     },

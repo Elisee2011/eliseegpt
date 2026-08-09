@@ -296,7 +296,10 @@ function ChatWindow({
     id: conversationId ?? "guest",
     messages: initialMessages,
     transport,
-    onError: () => toast.error("La réponse de l'IA a échoué. Réessayez."),
+    onError: (error) => {
+      const message = error.message.trim();
+      toast.error(message || "La réponse de l'IA a échoué. Réessayez.");
+    },
     onFinish: () => {
       // messages is up-to-date at this point; we sync in the effect below
     },

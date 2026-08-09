@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Lock, Mail } from "lucide-react";
+import { createLovableAuth } from "@lovable.dev/cloud-auth-js";
 import logoFull from "@/assets/elisee-gpt-logo.png.asset.json";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
-import { lovable } from "@/integrations/lovable/index";
-import { getSupabase, isAuthConfigured } from "@/lib/auth-client";
+import { getSupabase } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,12 +18,12 @@ export const Route = createFileRoute("/auth")({
       {
         name: "description",
         content:
-          "Connectez-vous ou créez un compte Elisée GPT pour sauvegarder vos discussions et bénéficier d'un assistant adapté à vos habitudes.",
+          "Connectez-vous ou créez un compte pour accéder à Elisée GPT sur tous vos appareils.",
       },
       { property: "og:title", content: "Connexion — Elisée GPT" },
       {
         property: "og:description",
-        content: "Connectez-vous pour sauvegarder vos discussions Elisée GPT.",
+        content: "Connectez-vous à Elisée GPT avec votre e-mail ou votre compte Google.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -76,20 +76,21 @@ function AuthPage() {
   };
 
   const signInGoogle = async () => {
-    if (!isAuthConfigured()) {
-      toast.error("La connexion n'est pas disponible sur ce déploiement.");
-      return;
-    }
     setPending(true);
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
+      const result = await createLovableAuth().signInWithOAuth("google", {
         redirect_uri: window.location.origin,
       });
       if (result.error) throw result.error;
       if (result.redirected) return;
+      const supabase = getSupabase();
+      if (!supabase) throw new Error("Service de connexion indisponible.");
+      const { error } = await supabase.auth.setSession(result.tokens);
+      if (error) throw error;
       void navigate({ to: "/", replace: true });
-    } catch {
-      toast.error("Connexion Google impossible");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Connexion Google impossible";
+      toast.error(message);
       setPending(false);
     }
   };
@@ -110,8 +111,8 @@ function AuthPage() {
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {mode === "signin"
-            ? "Connectez-vous pour retrouver vos discussions et un assistant adapté à vous."
-            : "Créez un compte pour sauvegarder vos discussions et personnaliser l'assistant."}
+            ? "Connectez-vous pour accéder à votre compte Elisée GPT."
+            : "Créez votre compte Elisée GPT en quelques secondes."}
         </p>
 
         <form onSubmit={submitEmail} className="mt-6 space-y-4">
