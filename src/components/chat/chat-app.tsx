@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Trash2 } from "lucide-react";
+import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
 import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
 import { toast } from "sonner";
 
@@ -49,6 +49,26 @@ function textOf(message: UIMessage) {
     .map((part) => (part.type === "text" ? part.text : ""))
     .join("")
     .trim();
+}
+
+type Attachment = { id: string; name: string; mediaType: string; url: string };
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function imagesOf(message: UIMessage) {
+  return message.parts.filter(
+    (part): part is Extract<UIMessage["parts"][number], { type: "file" }> =>
+      part.type === "file" && typeof part.mediaType === "string" && part.mediaType.startsWith("image/"),
+  );
 }
 
 export function ChatApp({ conversationId }: { conversationId: string | null }) {
@@ -278,7 +298,9 @@ function ChatWindow({
   onSignIn: () => void;
 }) {
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const onMessagesChangeRef = useRef(onMessagesChange);
   onMessagesChangeRef.current = onMessagesChange;
@@ -326,9 +348,40 @@ function ChatWindow({
 
   const submit = () => {
     const text = input.trim();
-    if (!text || busy) return;
+    if ((!text && attachments.length === 0) || busy) return;
     setInput("");
-    void sendMessage({ text });
+    const files = attachments.map((attachment) => ({
+      type: "file" as const,
+      mediaType: attachment.mediaType,
+      filename: attachment.name,
+      url: attachment.url,
+    }));
+    setAttachments([]);
+    void sendMessage({ text, files });
+  };
+
+  const addFiles = async (files: FileList | File[] | null) => {
+    if (!files) return;
+    const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    const next: Attachment[] = [];
+    for (const file of images) {
+      if (file.size > MAX_IMAGE_BYTES) {
+        toast.error(`${file.name} dépasse 5 Mo.`);
+        continue;
+      }
+      try {
+        next.push({
+          id: uid(),
+          name: file.name || "image.png",
+          mediaType: file.type,
+          url: await readAsDataUrl(file),
+        });
+      } catch {
+        toast.error(`Impossible de lire ${file.name}.`);
+      }
+    }
+    if (next.length > 0) setAttachments((prev) => [...prev, ...next].slice(0, 6));
   };
 
   return (
@@ -365,13 +418,28 @@ function ChatWindow({
 
           {messages.map((message) => {
             const text = textOf(message);
+            const images = imagesOf(message);
 
             if (message.role === "user") {
               return (
-                <div key={message.id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-user-bubble px-4 py-3 text-user-bubble-foreground">
-                    {text}
-                  </div>
+                <div key={message.id} className="flex flex-col items-end gap-2">
+                  {images.length > 0 && (
+                    <div className="flex max-w-[85%] flex-wrap justify-end gap-2">
+                      {images.map((image, index) => (
+                        <img
+                          key={`${message.id}-img-${index}`}
+                          src={image.url}
+                          alt={image.filename ?? "Image envoyée"}
+                          className="max-h-64 rounded-2xl border border-border object-cover"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {text && (
+                    <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-user-bubble px-4 py-3 text-user-bubble-foreground">
+                      {text}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -396,17 +464,76 @@ function ChatWindow({
 
       <div className="px-4 pb-6">
         <form
-          className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-3xl border border-border bg-card p-2 shadow-lg"
+          className="mx-auto flex w-full max-w-3xl flex-col gap-2 rounded-3xl border border-border bg-card p-2 shadow-lg"
           onSubmit={(event) => {
             event.preventDefault();
             submit();
           }}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            void addFiles(event.dataTransfer?.files ?? null);
+          }}
         >
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-2 pt-1">
+              {attachments.map((attachment) => (
+                <div key={attachment.id} className="relative">
+                  <img
+                    src={attachment.url}
+                    alt={attachment.name}
+                    className="size-16 rounded-xl border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Retirer ${attachment.name}`}
+                    onClick={() =>
+                      setAttachments((prev) => prev.filter((item) => item.id !== attachment.id))
+                    }
+                    className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-background text-muted-foreground shadow ring-1 ring-border hover:text-destructive"
+                  >
+                    <X className="size-3" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              void addFiles(event.target.files);
+              event.target.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-10 shrink-0 rounded-full"
+            onClick={() => fileInputRef.current?.click()}
+            title="Ajouter une image"
+            aria-label="Ajouter une image"
+          >
+            <Paperclip className="size-4" aria-hidden="true" />
+          </Button>
           <textarea
             ref={inputRef}
             value={input}
             rows={1}
             onChange={(event) => setInput(event.target.value)}
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData?.files ?? []);
+              if (files.some((file) => file.type.startsWith("image/"))) {
+                event.preventDefault();
+                void addFiles(files);
+              }
+            }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -420,10 +547,11 @@ function ChatWindow({
             type="submit"
             size="icon"
             className="size-10 shrink-0 rounded-full"
-            disabled={busy || !input.trim()}
+            disabled={busy || (!input.trim() && attachments.length === 0)}
           >
             <ArrowUp className="size-4" />
           </Button>
+          </div>
         </form>
       </div>
     </main>
