@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Trash2 } from "lucide-react";
+import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
 import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
 import { toast } from "sonner";
 
@@ -49,6 +49,26 @@ function textOf(message: UIMessage) {
     .map((part) => (part.type === "text" ? part.text : ""))
     .join("")
     .trim();
+}
+
+type Attachment = { id: string; name: string; mediaType: string; url: string };
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function imagesOf(message: UIMessage) {
+  return message.parts.filter(
+    (part): part is Extract<UIMessage["parts"][number], { type: "file" }> =>
+      part.type === "file" && typeof part.mediaType === "string" && part.mediaType.startsWith("image/"),
+  );
 }
 
 export function ChatApp({ conversationId }: { conversationId: string | null }) {
