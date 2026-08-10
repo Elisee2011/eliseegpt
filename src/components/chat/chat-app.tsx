@@ -92,8 +92,8 @@ function findGeneratedImage(value: unknown): string | undefined {
       return `data:image/png;base64,${record[key]}`;
     }
   }
-  if (typeof record.url === "string" && /^(data:image\/|https?:\/\/)/.test(record.url)) {
-    return record.url;
+  if (typeof record["url"] === "string" && /^(data:image\/|https?:\/\/)/.test(record["url"])) {
+    return record["url"];
   }
   for (const child of Object.values(record)) {
     const found = findGeneratedImage(child);
