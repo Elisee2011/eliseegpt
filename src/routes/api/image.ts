@@ -41,8 +41,6 @@ export const Route = createFileRoute("/api/image")({
           body: JSON.stringify({
             model: "google/gemini-3-pro-image",
             prompt,
-            n: 1,
-            size: "1024x1024",
             stream: true,
           }),
         });

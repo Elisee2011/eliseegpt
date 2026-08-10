@@ -71,6 +71,37 @@ function imagesOf(message: UIMessage) {
   );
 }
 
+function isImageGenerationRequest(text: string) {
+  return /\b(g[ée]n[èe]re|cr[ée]e|fabrique|dessine|imagine|fais|make|generate|create|draw)\b[\s\S]{0,80}\b(image|photo|illustration|affiche|logo|portrait|visuel|picture|poster)\b/i.test(
+    text,
+  );
+}
+
+function findGeneratedImage(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findGeneratedImage(item);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  for (const key of ["b64_json", "image_base64", "base64"]) {
+    if (typeof record[key] === "string" && record[key]) {
+      return `data:image/png;base64,${record[key]}`;
+    }
+  }
+  if (typeof record.url === "string" && /^(data:image\/|https?:\/\/)/.test(record.url)) {
+    return record.url;
+  }
+  for (const child of Object.values(record)) {
+    const found = findGeneratedImage(child);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export function ChatApp({ conversationId }: { conversationId: string | null }) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -299,6 +330,7 @@ function ChatWindow({
 }) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -314,7 +346,7 @@ function ChatWindow({
     [],
   );
 
-  const { messages, sendMessage, status } = useChat({
+  const { messages, sendMessage, setMessages, status } = useChat({
     id: conversationId ?? "guest",
     messages: initialMessages,
     transport,
@@ -336,7 +368,7 @@ function ChatWindow({
     onMessagesChangeRef.current(messages);
   }, [messages]);
 
-  const busy = status === "submitted" || status === "streaming";
+  const busy = status === "submitted" || status === "streaming" || generatingImage;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -346,10 +378,62 @@ function ChatWindow({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, status]);
 
+  const generateImage = async (prompt: string) => {
+    const userMessage: UIMessage = {
+      id: uid(),
+      role: "user",
+      parts: [{ type: "text", text: prompt }],
+    };
+    setMessages((previous) => [...previous, userMessage]);
+    setGeneratingImage(true);
+    try {
+      const response = await fetch("/api/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error || "La génération d’image a échoué.");
+      }
+
+      const streamText = await response.text();
+      let imageUrl: string | undefined;
+      for (const line of streamText.split("\n")) {
+        const data = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
+        if (!data || data === "[DONE]") continue;
+        try {
+          imageUrl = findGeneratedImage(JSON.parse(data)) ?? imageUrl;
+        } catch {
+          // Ignore SSE metadata lines that are not JSON.
+        }
+      }
+      if (!imageUrl) throw new Error("L’image n’a pas pu être récupérée. Réessayez.");
+
+      const assistantMessage: UIMessage = {
+        id: uid(),
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Voici l’image que j’ai créée pour vous." },
+          { type: "file", mediaType: "image/png", filename: "elisee-gpt-image.png", url: imageUrl },
+        ],
+      };
+      setMessages((previous) => [...previous, assistantMessage]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "La génération d’image a échoué.");
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
   const submit = () => {
     const text = input.trim();
     if ((!text && attachments.length === 0) || busy) return;
     setInput("");
+    if (text && attachments.length === 0 && isImageGenerationRequest(text)) {
+      void generateImage(text);
+      return;
+    }
     const files = attachments.map((attachment) => ({
       type: "file" as const,
       mediaType: attachment.mediaType,
@@ -445,8 +529,20 @@ function ChatWindow({
             }
 
             return (
-              <div key={message.id} className="space-y-2">
+              <div key={message.id} className="space-y-3">
                 {text && <Markdown>{text}</Markdown>}
+                {images.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {images.map((image, index) => (
+                      <img
+                        key={`${message.id}-generated-${index}`}
+                        src={image.url}
+                        alt={image.filename ?? "Image générée par Elisée GPT"}
+                        className="max-h-[32rem] max-w-full rounded-2xl border border-border object-contain"
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -457,6 +553,9 @@ function ChatWindow({
               <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.1s]" />
               <span className="size-2 animate-bounce rounded-full bg-primary" />
             </div>
+          )}
+          {generatingImage && (
+            <p className="text-sm text-muted-foreground">Création de l’image en cours…</p>
           )}
           <div ref={bottomRef} />
         </div>
