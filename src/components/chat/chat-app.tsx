@@ -4,6 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
 import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
+import { authHeaders } from "@/lib/auth-headers";
 import { toast } from "sonner";
 
 import { Markdown } from "./markdown";
@@ -342,6 +343,7 @@ function ChatWindow({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        headers: async () => await authHeaders(),
       }),
     [],
   );
@@ -389,7 +391,7 @@ function ChatWindow({
     try {
       const response = await fetch("/api/image", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({ prompt }),
       });
       if (!response.ok) {

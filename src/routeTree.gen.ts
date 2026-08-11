@@ -14,6 +14,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiImageRouteImport } from './routes/api/image'
 import { Route as CConversationIdRouteImport } from './routes/c.$conversationId'
+import { Route as ApiImageEditRouteImport } from './routes/api/image/edit'
+import { Route as ApiPublicKkiapayWebhookRouteImport } from './routes/api/public/kkiapay-webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,34 +42,64 @@ const CConversationIdRoute = CConversationIdRouteImport.update({
   path: '/c/$conversationId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiImageEditRoute = ApiImageEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => ApiImageRoute,
+} as any)
+const ApiPublicKkiapayWebhookRoute = ApiPublicKkiapayWebhookRouteImport.update({
+  id: '/api/public/kkiapay-webhook',
+  path: '/api/public/kkiapay-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/image': typeof ApiImageRoute
+  '/api/image': typeof ApiImageRouteWithChildren
   '/c/$conversationId': typeof CConversationIdRoute
+  '/api/image/edit': typeof ApiImageEditRoute
+  '/api/public/kkiapay-webhook': typeof ApiPublicKkiapayWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/image': typeof ApiImageRoute
+  '/api/image': typeof ApiImageRouteWithChildren
   '/c/$conversationId': typeof CConversationIdRoute
+  '/api/image/edit': typeof ApiImageEditRoute
+  '/api/public/kkiapay-webhook': typeof ApiPublicKkiapayWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/image': typeof ApiImageRoute
+  '/api/image': typeof ApiImageRouteWithChildren
   '/c/$conversationId': typeof CConversationIdRoute
+  '/api/image/edit': typeof ApiImageEditRoute
+  '/api/public/kkiapay-webhook': typeof ApiPublicKkiapayWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/api/chat'
+    | '/api/image'
+    | '/c/$conversationId'
+    | '/api/image/edit'
+    | '/api/public/kkiapay-webhook'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId'
+  to:
+    | '/'
+    | '/auth'
+    | '/api/chat'
+    | '/api/image'
+    | '/c/$conversationId'
+    | '/api/image/edit'
+    | '/api/public/kkiapay-webhook'
   id:
     | '__root__'
     | '/'
@@ -75,14 +107,17 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/image'
     | '/c/$conversationId'
+    | '/api/image/edit'
+    | '/api/public/kkiapay-webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   ApiChatRoute: typeof ApiChatRoute
-  ApiImageRoute: typeof ApiImageRoute
+  ApiImageRoute: typeof ApiImageRouteWithChildren
   CConversationIdRoute: typeof CConversationIdRoute
+  ApiPublicKkiapayWebhookRoute: typeof ApiPublicKkiapayWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -122,26 +157,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CConversationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/image/edit': {
+      id: '/api/image/edit'
+      path: '/edit'
+      fullPath: '/api/image/edit'
+      preLoaderRoute: typeof ApiImageEditRouteImport
+      parentRoute: typeof ApiImageRoute
+    }
+    '/api/public/kkiapay-webhook': {
+      id: '/api/public/kkiapay-webhook'
+      path: '/api/public/kkiapay-webhook'
+      fullPath: '/api/public/kkiapay-webhook'
+      preLoaderRoute: typeof ApiPublicKkiapayWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
+
+interface ApiImageRouteChildren {
+  ApiImageEditRoute: typeof ApiImageEditRoute
+}
+
+const ApiImageRouteChildren: ApiImageRouteChildren = {
+  ApiImageEditRoute: ApiImageEditRoute,
+}
+
+const ApiImageRouteWithChildren = ApiImageRoute._addFileChildren(
+  ApiImageRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   ApiChatRoute: ApiChatRoute,
-  ApiImageRoute: ApiImageRoute,
+  ApiImageRoute: ApiImageRouteWithChildren,
   CConversationIdRoute: CConversationIdRoute,
+  ApiPublicKkiapayWebhookRoute: ApiPublicKkiapayWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
