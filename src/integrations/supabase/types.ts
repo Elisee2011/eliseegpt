@@ -38,6 +38,33 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_ledger: {
+        Row: {
+          created_at: string
+          delta: number
+          id: string
+          reason: string
+          ref: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          id?: string
+          reason: string
+          ref?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          id?: string
+          reason?: string
+          ref?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           content: string
@@ -73,12 +100,101 @@ export type Database = {
           },
         ]
       }
+      payment_orders: {
+        Row: {
+          amount: number
+          created_at: string
+          credits: number
+          currency: string
+          failure_reason: string | null
+          id: string
+          pack: string
+          paid_at: string | null
+          provider: string
+          provider_transaction_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          credits: number
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          pack: string
+          paid_at?: string | null
+          provider?: string
+          provider_transaction_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          credits?: number
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          pack?: string
+          paid_at?: string | null
+          provider?: string
+          provider_transaction_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_credits: {
+        Row: {
+          balance: number
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ensure_user_credits: { Args: { _user_id: string }; Returns: number }
+      fail_order: {
+        Args: { _order_id: string; _reason: string; _status: string }
+        Returns: undefined
+      }
+      refund_credits: {
+        Args: { _amount: number; _reason: string; _user_id: string }
+        Returns: number
+      }
+      settle_payment: {
+        Args: {
+          _order_id: string
+          _paid_amount: number
+          _transaction_id: string
+        }
+        Returns: Json
+      }
+      spend_credits: {
+        Args: { _amount: number; _reason: string; _user_id: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
