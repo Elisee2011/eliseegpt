@@ -30,30 +30,30 @@ function env(name: string) {
 /** Providers with a configured key, in fallback order. */
 export function configuredProviders(): ProviderDef[] {
   const defs: (ProviderDef | undefined)[] = [
-    env("OPENROUTER_API_KEY") && {
+    env("OPENROUTER_API_KEY") ? {
       name: "openrouter" as const,
       key: env("OPENROUTER_API_KEY")!,
       chatModel: env("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini",
       imageModel: env("OPENROUTER_IMAGE_MODEL") ?? "google/gemini-2.5-flash-image-preview",
-    },
-    env("OPENAI_API_KEY") && {
+    } : undefined,
+    env("OPENAI_API_KEY") ? {
       name: "openai" as const,
       key: env("OPENAI_API_KEY")!,
       chatModel: env("OPENAI_MODEL") ?? "gpt-4o-mini",
       imageModel: "gpt-image-1",
-    },
-    env("GOOGLE_AI_API_KEY") && {
+    } : undefined,
+    env("GOOGLE_AI_API_KEY") ? {
       name: "google" as const,
       key: env("GOOGLE_AI_API_KEY")!,
       chatModel: env("GOOGLE_MODEL") ?? "gemini-2.5-flash",
       imageModel: "gemini-2.5-flash-image",
-    },
-    env("ANTHROPIC_API_KEY") && {
+    } : undefined,
+    env("ANTHROPIC_API_KEY") ? {
       name: "anthropic" as const,
       key: env("ANTHROPIC_API_KEY")!,
       chatModel: env("ANTHROPIC_MODEL") ?? "claude-3-5-sonnet-latest",
       imageModel: "",
-    },
+    } : undefined,
   ];
   return defs.filter(Boolean) as ProviderDef[];
 }
@@ -99,7 +99,7 @@ function toOpenAiMessages(system: string, messages: ChatMessage[]) {
 function toAnthropicMessages(messages: ChatMessage[]) {
   return messages.map((message) => ({
     role: message.role,
-    content: message.parts.flatMap((part) => {
+    content: message.parts.flatMap((part): Record<string, unknown>[] => {
       if (part.type === "text") return [{ type: "text" as const, text: part.text }];
       const parsed = dataUrlParts(part.dataUrl);
       if (!parsed) return [];
