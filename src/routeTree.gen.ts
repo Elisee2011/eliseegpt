@@ -7,19 +7,26 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiImageRouteImport } from './routes/api/image'
 import { Route as CConversationIdRouteImport } from './routes/c.$conversationId'
+import { Route as ApiImageEditRouteImport } from './routes/api/image/edit'
 
 const IndexRoute = IndexRouteImport.update({ id: '/', path: '/', getParentRoute: () => rootRouteImport } as any)
 const AuthRoute = AuthRouteImport.update({ id: '/auth', path: '/auth', getParentRoute: () => rootRouteImport } as any)
 const ApiChatRoute = ApiChatRouteImport.update({ id: '/api/chat', path: '/api/chat', getParentRoute: () => rootRouteImport } as any)
 const ApiImageRoute = ApiImageRouteImport.update({ id: '/api/image', path: '/api/image', getParentRoute: () => rootRouteImport } as any)
 const CConversationIdRoute = CConversationIdRouteImport.update({ id: '/c/$conversationId', path: '/c/$conversationId', getParentRoute: () => rootRouteImport } as any)
+const ApiImageEditRoute = ApiImageEditRouteImport.update({ id: '/edit', path: '/edit', getParentRoute: () => ApiImageRoute } as any)
+
+interface ApiImageRouteChildren { ApiImageEditRoute: typeof ApiImageEditRoute }
+const ApiImageRouteChildren: ApiImageRouteChildren = { ApiImageEditRoute }
+const ApiImageRouteWithChildren = ApiImageRoute._addFileChildren(ApiImageRouteChildren)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/image': typeof ApiImageRoute
+  '/api/image': typeof ApiImageRouteWithChildren
   '/c/$conversationId': typeof CConversationIdRoute
+  '/api/image/edit': typeof ApiImageEditRoute
 }
 export interface FileRoutesByTo extends FileRoutesByFullPath {}
 export interface FileRoutesById {
@@ -27,22 +34,23 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
-  '/api/image': typeof ApiImageRoute
+  '/api/image': typeof ApiImageRouteWithChildren
   '/c/$conversationId': typeof CConversationIdRoute
+  '/api/image/edit': typeof ApiImageEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId'
+  fullPaths: '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId' | '/api/image/edit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId'
-  id: '__root__' | '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId'
+  to: '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId' | '/api/image/edit'
+  id: '__root__' | '/' | '/auth' | '/api/chat' | '/api/image' | '/c/$conversationId' | '/api/image/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   ApiChatRoute: typeof ApiChatRoute
-  ApiImageRoute: typeof ApiImageRoute
+  ApiImageRoute: typeof ApiImageRouteWithChildren
   CConversationIdRoute: typeof CConversationIdRoute
 }
 
@@ -53,8 +61,9 @@ declare module '@tanstack/react-router' {
     '/api/chat': { id: '/api/chat'; path: '/api/chat'; fullPath: '/api/chat'; preLoaderRoute: typeof ApiChatRouteImport; parentRoute: typeof rootRouteImport }
     '/api/image': { id: '/api/image'; path: '/api/image'; fullPath: '/api/image'; preLoaderRoute: typeof ApiImageRouteImport; parentRoute: typeof rootRouteImport }
     '/c/$conversationId': { id: '/c/$conversationId'; path: '/c/$conversationId'; fullPath: '/c/$conversationId'; preLoaderRoute: typeof CConversationIdRouteImport; parentRoute: typeof rootRouteImport }
+    '/api/image/edit': { id: '/api/image/edit'; path: '/edit'; fullPath: '/api/image/edit'; preLoaderRoute: typeof ApiImageEditRouteImport; parentRoute: typeof ApiImageRouteImport }
   }
 }
 
-const rootRouteChildren: RootRouteChildren = { IndexRoute, AuthRoute, ApiChatRoute, ApiImageRoute, CConversationIdRoute }
+const rootRouteChildren: RootRouteChildren = { IndexRoute, AuthRoute, ApiChatRoute, ApiImageRoute: ApiImageRouteWithChildren, CConversationIdRoute }
 export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren)._addFileTypes<FileRouteTypes>()
