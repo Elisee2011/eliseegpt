@@ -8,8 +8,6 @@ import {
   type ChatMessage,
   type ChatPart,
 } from "@/lib/ai-router.server";
-import { CREDIT_COST } from "@/lib/credit-packs";
-import { InsufficientCreditsError, getUserFromRequest, refundCredits, spendCredits } from "@/lib/credits.server";
 
 const SYSTEM_PROMPT = `Tu es Elisée GPT, un assistant IA créé et entraîné par AGBEBAVI Edem Elisée.
 
@@ -64,25 +62,6 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Messages requis", { status: 400 });
         }
 
-        // Authentication is optional for chat. Guests may use the AI; a user is only
-        // required when credits need to be tied to an account. Guest credit usage is
-        // intentionally handled outside the authenticated balance system.
-        const user = await getUserFromRequest(request);
-        if (user) {
-          try {
-            await spendCredits(user.id, CREDIT_COST.chat, "chat");
-          } catch (error) {
-            if (error instanceof InsufficientCreditsError) {
-              return new Response(
-                `Crédits Elisée GPT épuisés (solde : ${error.balance}). Rechargez depuis la page Crédits.`,
-                { status: 402 },
-              );
-            }
-            console.error("[chat] credit error", error);
-            return new Response("Impossible de vérifier vos crédits. Réessayez.", { status: 500 });
-          }
-        }
-
         const messages = toRouterMessages(body.messages as UIMessage[]);
         if (messages.length === 0) return new Response("Messages requis", { status: 400 });
 
@@ -95,15 +74,12 @@ export const Route = createFileRoute("/api/chat")({
         try {
           stream = await streamChat(systemPrompt, messages);
         } catch (error) {
-          if (user) await refundCredits(user.id, CREDIT_COST.chat, "refund:chat");
           if (error instanceof NoProviderConfiguredError) {
             return new Response("Variable manquante : OPENROUTER_API_KEY", { status: 503 });
           }
           if (error instanceof AllProvidersFailedError) {
             console.error("[chat] all providers failed", error.attempts);
-            return new Response("Aucun fournisseur IA n'est disponible actuellement. Aucun crédit n'a été débité.", {
-              status: 503,
-            });
+            return new Response("Aucun fournisseur IA n'est disponible actuellement.", { status: 503 });
           }
           console.error("[chat] unexpected error", error);
           return new Response("Le service IA est momentanément indisponible.", { status: 503 });
@@ -113,18 +89,12 @@ export const Route = createFileRoute("/api/chat")({
           execute: async ({ writer }) => {
             const id = crypto.randomUUID();
             writer.write({ type: "text-start", id });
-            let received = false;
             try {
               for await (const delta of stream.textStream) {
-                received = true;
                 writer.write({ type: "text-delta", id, delta });
               }
             } finally {
               writer.write({ type: "text-end", id });
-            }
-            if (!received) {
-              if (user) await refundCredits(user.id, CREDIT_COST.chat, "refund:chat-empty");
-              throw new Error("La réponse IA est arrivée vide. Aucun crédit n'a été débité.");
             }
           },
           onError: (error) => (error instanceof Error ? error.message : "La réponse IA a échoué."),
