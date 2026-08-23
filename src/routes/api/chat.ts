@@ -1,13 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 
-import {
-  AllProvidersFailedError,
-  NoProviderConfiguredError,
-  streamChat,
-  type ChatMessage,
-  type ChatPart,
-} from "@/lib/ai-router.server";
+import { AllProvidersFailedError, streamChat, type ChatMessage, type ChatPart } from "@/lib/ai-router.server";
+
+const FALLBACK_CHAT_URL = "https://eliseegpt.lovable.app/api/chat";
 
 const SYSTEM_PROMPT = `Tu es Elisée GPT, un assistant IA créé et entraîné par AGBEBAVI Edem Elisée.
 
@@ -32,13 +28,7 @@ function toRouterMessages(messages: UIMessage[]): ChatMessage[] {
       const parts: ChatPart[] = [];
       for (const part of message.parts ?? []) {
         if (part.type === "text" && part.text.trim()) parts.push({ type: "text", text: part.text });
-        if (
-          part.type === "file" &&
-          typeof part.mediaType === "string" &&
-          part.mediaType.startsWith("image/") &&
-          typeof part.url === "string" &&
-          part.url.startsWith("data:")
-        ) {
+        if (part.type === "file" && typeof part.mediaType === "string" && part.mediaType.startsWith("image/") && typeof part.url === "string" && part.url.startsWith("data:")) {
           parts.push({ type: "image", mediaType: part.mediaType, dataUrl: part.url });
         }
       }
@@ -46,6 +36,38 @@ function toRouterMessages(messages: UIMessage[]): ChatMessage[] {
     })
     .filter((message) => message.parts.length > 0)
     .slice(-20);
+}
+
+function configuredProviderExists() {
+  return ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "GOOGLE_AI_API_KEY", "ANTHROPIC_API_KEY"].some((key) => {
+    const value = process.env[key];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
+async function fallbackChat(request: Request, body: { messages: unknown; userPreferences?: unknown }) {
+  if (request.headers.get("X-Elisee-Proxy") === "1") {
+    return new Response("Service IA temporairement indisponible", { status: 503 });
+  }
+  try {
+    const response = await fetch(FALLBACK_CHAT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(90_000),
+    });
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: {
+        "Content-Type": response.headers.get("Content-Type") ?? "text/event-stream",
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (error) {
+    console.error("[chat] keyless fallback failed", error);
+    return new Response("Le service IA est momentanément indisponible.", { status: 503 });
+  }
 }
 
 export const Route = createFileRoute("/api/chat")({
@@ -58,52 +80,45 @@ export const Route = createFileRoute("/api/chat")({
         } catch {
           return new Response("Requête invalide", { status: 400 });
         }
-        if (!Array.isArray(body.messages) || body.messages.length === 0) {
-          return new Response("Messages requis", { status: 400 });
+        if (!Array.isArray(body.messages) || body.messages.length === 0) return new Response("Messages requis", { status: 400 });
+
+        // No provider key is required for the normal keyless setup: use the same
+        // hosted Elisée GPT service that the project used before the provider router.
+        if (!configuredProviderExists()) {
+          return fallbackChat(request, { messages: body.messages, userPreferences: body.userPreferences });
         }
 
         const messages = toRouterMessages(body.messages as UIMessage[]);
         if (messages.length === 0) return new Response("Messages requis", { status: 400 });
-
         let systemPrompt = SYSTEM_PROMPT;
         if (typeof body.userPreferences === "string" && body.userPreferences.trim()) {
           systemPrompt += `\n\nProfil et habitudes de l'utilisateur :\n${body.userPreferences.slice(0, 2_000)}`;
         }
 
-        let stream: Awaited<ReturnType<typeof streamChat>>;
         try {
-          stream = await streamChat(systemPrompt, messages);
+          const stream = await streamChat(systemPrompt, messages);
+          const uiStream = createUIMessageStream({
+            execute: async ({ writer }) => {
+              const id = crypto.randomUUID();
+              writer.write({ type: "text-start", id });
+              try {
+                for await (const delta of stream.textStream) writer.write({ type: "text-delta", id, delta });
+              } finally {
+                writer.write({ type: "text-end", id });
+              }
+            },
+            onError: (error) => (error instanceof Error ? error.message : "La réponse IA a échoué."),
+          });
+          return createUIMessageStreamResponse({ stream: uiStream, headers: { "X-AI-Provider": stream.provider } });
         } catch (error) {
-          if (error instanceof NoProviderConfiguredError) {
-            return new Response("Variable manquante : OPENROUTER_API_KEY", { status: 503 });
-          }
           if (error instanceof AllProvidersFailedError) {
-            console.error("[chat] all providers failed", error.attempts);
-            return new Response("Aucun fournisseur IA n'est disponible actuellement.", { status: 503 });
+            // A configured provider may be temporarily unavailable; try the old
+            // hosted service before showing an error to the user.
+            return fallbackChat(request, { messages: body.messages, userPreferences: body.userPreferences });
           }
           console.error("[chat] unexpected error", error);
-          return new Response("Le service IA est momentanément indisponible.", { status: 503 });
+          return fallbackChat(request, { messages: body.messages, userPreferences: body.userPreferences });
         }
-
-        const uiStream = createUIMessageStream({
-          execute: async ({ writer }) => {
-            const id = crypto.randomUUID();
-            writer.write({ type: "text-start", id });
-            try {
-              for await (const delta of stream.textStream) {
-                writer.write({ type: "text-delta", id, delta });
-              }
-            } finally {
-              writer.write({ type: "text-end", id });
-            }
-          },
-          onError: (error) => (error instanceof Error ? error.message : "La réponse IA a échoué."),
-        });
-
-        return createUIMessageStreamResponse({
-          stream: uiStream,
-          headers: { "X-AI-Provider": stream.provider },
-        });
       },
     },
   },
