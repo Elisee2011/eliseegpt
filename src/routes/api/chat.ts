@@ -64,9 +64,23 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Messages requis", { status: 400 });
         }
 
+        // Authentication is optional for chat. Guests may use the AI; a user is only
+        // required when credits need to be tied to an account. Guest credit usage is
+        // intentionally handled outside the authenticated balance system.
         const user = await getUserFromRequest(request);
-        if (!user) {
-          return new Response("Connectez-vous pour discuter avec Elisée GPT.", { status: 401 });
+        if (user) {
+          try {
+            await spendCredits(user.id, CREDIT_COST.chat, "chat");
+          } catch (error) {
+            if (error instanceof InsufficientCreditsError) {
+              return new Response(
+                `Crédits Elisée GPT épuisés (solde : ${error.balance}). Rechargez depuis la page Crédits.`,
+                { status: 402 },
+              );
+            }
+            console.error("[chat] credit error", error);
+            return new Response("Impossible de vérifier vos crédits. Réessayez.", { status: 500 });
+          }
         }
 
         const messages = toRouterMessages(body.messages as UIMessage[]);
@@ -77,26 +91,11 @@ export const Route = createFileRoute("/api/chat")({
           systemPrompt += `\n\nProfil et habitudes de l'utilisateur :\n${body.userPreferences.slice(0, 2_000)}`;
         }
 
-        // 1. Debit Élisée GPT credits (Supabase) before calling any provider.
-        try {
-          await spendCredits(user.id, CREDIT_COST.chat, "chat");
-        } catch (error) {
-          if (error instanceof InsufficientCreditsError) {
-            return new Response(
-              `Crédits Elisée GPT épuisés (solde : ${error.balance}). Rechargez depuis la page Crédits.`,
-              { status: 402 },
-            );
-          }
-          console.error("[chat] credit error", error);
-          return new Response("Impossible de vérifier vos crédits. Réessayez.", { status: 500 });
-        }
-
-        // 2. Call the AI Router (OpenRouter first, then the configured fallbacks).
         let stream: Awaited<ReturnType<typeof streamChat>>;
         try {
           stream = await streamChat(systemPrompt, messages);
         } catch (error) {
-          await refundCredits(user.id, CREDIT_COST.chat, "refund:chat");
+          if (user) await refundCredits(user.id, CREDIT_COST.chat, "refund:chat");
           if (error instanceof NoProviderConfiguredError) {
             return new Response("Variable manquante : OPENROUTER_API_KEY", { status: 503 });
           }
@@ -124,7 +123,7 @@ export const Route = createFileRoute("/api/chat")({
               writer.write({ type: "text-end", id });
             }
             if (!received) {
-              await refundCredits(user.id, CREDIT_COST.chat, "refund:chat-empty");
+              if (user) await refundCredits(user.id, CREDIT_COST.chat, "refund:chat-empty");
               throw new Error("La réponse IA est arrivée vide. Aucun crédit n'a été débité.");
             }
           },
