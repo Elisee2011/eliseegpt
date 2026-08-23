@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
+import { ArrowUp, Download, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
 import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
 import { authHeaders } from "@/lib/auth-headers";
 import { toast } from "sonner";
@@ -103,6 +103,16 @@ function findGeneratedImage(value: unknown): string | undefined {
   return undefined;
 }
 
+function downloadImage(url: string, filename = "elisee-gpt-image.png") {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 export function ChatApp({ conversationId }: { conversationId: string | null }) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -158,7 +168,6 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
     setConversations((prev) => prev.map((c) => (c.id === id ? updater(c) : c)));
   }, []);
 
-  // Auto-create a conversation on first visit (guest mode)
   useEffect(() => {
     if (!hydrated || conversationId) return;
     if (conversations.length === 0) {
@@ -356,12 +365,9 @@ function ChatWindow({
       const message = error.message.trim();
       toast.error(message || "La réponse de l'IA a échoué. Réessayez.");
     },
-    onFinish: () => {
-      // messages is up-to-date at this point; we sync in the effect below
-    },
+    onFinish: () => {},
   });
 
-  // Sync messages back to parent whenever they change
   useEffect(() => {
     if (messages.length === 0) return;
     const signature = JSON.stringify(messages);
@@ -534,14 +540,25 @@ function ChatWindow({
               <div key={message.id} className="space-y-3">
                 {text && <Markdown>{text}</Markdown>}
                 {images.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {images.map((image, index) => (
-                      <img
-                        key={`${message.id}-generated-${index}`}
-                        src={image.url}
-                        alt={image.filename ?? "Image générée par Elisée GPT"}
-                        className="max-h-[32rem] max-w-full rounded-2xl border border-border object-contain"
-                      />
+                      <div key={`${message.id}-generated-${index}`} className="group relative w-fit">
+                        <img
+                          src={image.url}
+                          alt={image.filename ?? "Image générée par Elisée GPT"}
+                          className="max-h-[32rem] max-w-full rounded-2xl border border-border object-contain"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => downloadImage(image.url, image.filename ?? `elisee-gpt-image-${index + 1}.png`)}
+                          className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full bg-background/90 px-3 py-2 text-xs font-medium text-foreground shadow-lg ring-1 ring-border backdrop-blur transition-opacity hover:bg-background"
+                          title="Télécharger l’image"
+                          aria-label="Télécharger l’image"
+                        >
+                          <Download className="size-4" aria-hidden="true" />
+                          Télécharger
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -601,57 +618,57 @@ function ChatWindow({
           )}
 
           <div className="flex items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              void addFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-10 shrink-0 rounded-full"
-            onClick={() => fileInputRef.current?.click()}
-            title="Ajouter une image"
-            aria-label="Ajouter une image"
-          >
-            <Paperclip className="size-4" aria-hidden="true" />
-          </Button>
-          <textarea
-            ref={inputRef}
-            value={input}
-            rows={1}
-            onChange={(event) => setInput(event.target.value)}
-            onPaste={(event) => {
-              const files = Array.from(event.clipboardData?.files ?? []);
-              if (files.some((file) => file.type.startsWith("image/"))) {
-                event.preventDefault();
-                void addFiles(files);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                submit();
-              }
-            }}
-            placeholder="Écrivez votre message…"
-            className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="size-10 shrink-0 rounded-full"
-            disabled={busy || (!input.trim() && attachments.length === 0)}
-          >
-            <ArrowUp className="size-4" />
-          </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                void addFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-10 shrink-0 rounded-full"
+              onClick={() => fileInputRef.current?.click()}
+              title="Ajouter une image"
+              aria-label="Ajouter une image"
+            >
+              <Paperclip className="size-4" aria-hidden="true" />
+            </Button>
+            <textarea
+              ref={inputRef}
+              value={input}
+              rows={1}
+              onChange={(event) => setInput(event.target.value)}
+              onPaste={(event) => {
+                const files = Array.from(event.clipboardData?.files ?? []);
+                if (files.some((file) => file.type.startsWith("image/"))) {
+                  event.preventDefault();
+                  void addFiles(files);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder="Écrivez votre message…"
+              className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              className="size-10 shrink-0 rounded-full"
+              disabled={busy || (!input.trim() && attachments.length === 0)}
+            >
+              <ArrowUp className="size-4" />
+            </Button>
           </div>
         </form>
       </div>
