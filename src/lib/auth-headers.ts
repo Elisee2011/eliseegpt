@@ -60,13 +60,31 @@ function installKeylessChatFetch() {
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
-    if (method.toUpperCase() !== "POST" || !url.endsWith("/api/chat")) return originalFetch(input, init);
+    if (method.toUpperCase() !== "POST") return originalFetch(input, init);
+
+    const isChat = url.endsWith("/api/chat");
+    const isImage = url.endsWith("/api/image");
+    if (!isChat && !isImage) return originalFetch(input, init);
 
     try {
       const rawBody = typeof init?.body === "string"
         ? init.body
         : await (input instanceof Request ? input.clone().text() : Promise.resolve("{}"));
-      const body = JSON.parse(rawBody) as { messages?: Array<any> };
+      const body = JSON.parse(rawBody) as { messages?: Array<any>; prompt?: unknown };
+      const puter = await ensurePuterSignedIn();
+
+      if (isImage) {
+        const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+        if (!prompt) throw new Error("Décrivez l’image à générer.");
+        const image = await puter.ai.txt2img(prompt, { provider: "gemini" });
+        const imageUrl = image?.src;
+        if (!imageUrl) throw new Error("Puter n'a pas renvoyé l’image.");
+        return new Response(
+          `data: ${JSON.stringify({ url: imageUrl })}\n\n` + `data: [DONE]\n\n`,
+          { status: 200, headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache" } },
+        );
+      }
+
       const messages = Array.isArray(body.messages) ? body.messages : [];
       const puterMessages = messages
         .filter((message) => ["system", "user", "assistant"].includes(message?.role))
@@ -81,7 +99,6 @@ function installKeylessChatFetch() {
         }))
         .filter((message) => message.content.trim());
 
-      const puter = await ensurePuterSignedIn();
       const result = await puter.ai.chat(puterMessages);
       const text = typeof result === "string" ? result : result?.message?.content ?? result?.text ?? "";
       if (!text) throw new Error("Le service IA n'a renvoyé aucune réponse.");
@@ -94,28 +111,21 @@ function installKeylessChatFetch() {
         `data: ${JSON.stringify({ type: "text-end", id })}\n\n`,
         `data: [DONE]\n\n`,
       ];
-      return new Response(
-        new ReadableStream({
-          start(controller) {
-            for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
-            controller.close();
-          },
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "text/event-stream; charset=utf-8",
-            "Cache-Control": "no-cache, no-transform",
-            "x-vercel-ai-ui-message-stream": "v1",
-          },
+      return new Response(new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+          controller.close();
         },
-      );
+      }), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "x-vercel-ai-ui-message-stream": "v1" },
+      });
     } catch (error) {
-      console.error("[Elisée GPT] Puter chat failed", error);
-      return new Response(
-        JSON.stringify({ error: error instanceof Error ? error.message : "Le service IA est indisponible." }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      );
+      console.error("[Elisée GPT] Puter request failed", error);
+      return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Le service IA est indisponible." }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
     }
   };
 }
