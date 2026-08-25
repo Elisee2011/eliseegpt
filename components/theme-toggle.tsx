@@ -56,11 +56,9 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={light ? "Activer le mode sombre" : "Activer le mode clair"}
       title={light ? "Mode sombre" : "Mode clair"}
-      className="fixed right-4 top-4 z-50 grid size-10 place-items-center rounded-full border border-border bg-card text-foreground shadow-lg transition-colors hover:bg-accent"
+      className="fixed right-4 top-4 z-[9999] grid size-10 place-items-center rounded-full border border-border bg-card text-foreground shadow-lg transition-colors hover:bg-accent"
     >
-      <span aria-hidden="true" className="text-lg">
-        {light ? "🌙" : "☀️"}
-      </span>
+      <span aria-hidden="true" className="text-lg">{light ? "🌙" : "☀️"}</span>
     </button>
   );
 }
