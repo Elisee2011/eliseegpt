@@ -358,9 +358,23 @@ async function imageViaGoogle(provider: ProviderDef, prompt: string, inputImages
   return dataUrl;
 }
 
+/** Image engine hosted by the platform gateway (no external key required). */
+function lovableImageProvider(): ProviderDef | undefined {
+  const key = env("LOVABLE_API_KEY");
+  if (!key) return undefined;
+  return {
+    name: "lovable",
+    key,
+    chatModel: "",
+    imageModel: env("LOVABLE_IMAGE_MODEL") ?? "google/gemini-3-pro-image",
+  };
+}
+
 /** Generates (or edits, when inputImages are given) an image with the same fallback order. */
 export async function createImage(prompt: string, inputImages: string[] = []): Promise<ImageResult> {
   const providers = configuredProviders().filter((provider) => provider.name !== "anthropic");
+  const gateway = lovableImageProvider();
+  if (gateway) providers.push(gateway);
   if (providers.length === 0) throw new NoProviderConfiguredError();
 
   const attempts: { provider: ProviderName; detail: string }[] = [];
@@ -369,9 +383,11 @@ export async function createImage(prompt: string, inputImages: string[] = []): P
       const dataUrl =
         provider.name === "openrouter"
           ? await imageViaOpenAiCompatibleChat(provider, "https://openrouter.ai/api/v1/chat/completions", prompt, inputImages)
-          : provider.name === "openai"
-            ? await imageViaOpenAi(provider, prompt, inputImages)
-            : await imageViaGoogle(provider, prompt, inputImages);
+          : provider.name === "lovable"
+            ? await imageViaOpenAiCompatibleChat(provider, "https://ai.gateway.lovable.dev/v1/images/generations", prompt, inputImages)
+            : provider.name === "openai"
+              ? await imageViaOpenAi(provider, prompt, inputImages)
+              : await imageViaGoogle(provider, prompt, inputImages);
       return { provider: provider.name, dataUrl };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
