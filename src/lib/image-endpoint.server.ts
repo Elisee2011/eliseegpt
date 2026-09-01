@@ -24,7 +24,7 @@ export async function handleImageRequest(request: Request, options: { edit: bool
     return Response.json({ error: "Ajoutez au moins une image à modifier." }, { status: 400 });
   }
 
-  const hasProviderKey = ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "GOOGLE_AI_API_KEY"].some((key) => {
+  const hasProviderKey = ["OPENROUTER_API_KEY", "OPENAI_API_KEY", "GOOGLE_AI_API_KEY", "LOVABLE_API_KEY"].some((key) => {
     const value = process.env[key];
     return typeof value === "string" && value.trim().length > 0;
   });
