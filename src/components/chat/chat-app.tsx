@@ -405,18 +405,25 @@ function ChatWindow({
         throw new Error(payload?.error || "La génération d’image a échoué.");
       }
 
-      const streamText = await response.text();
+      const raw = await response.text();
       let imageUrl: string | undefined;
-      for (const line of streamText.split("\n")) {
-        const data = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
-        if (!data || data === "[DONE]") continue;
-        try {
-          imageUrl = findGeneratedImage(JSON.parse(data)) ?? imageUrl;
-        } catch {
-          // Ignore SSE metadata lines that are not JSON.
+      try {
+        const payload = JSON.parse(raw) as { imageUrl?: string };
+        imageUrl = typeof payload.imageUrl === "string" ? payload.imageUrl : findGeneratedImage(payload);
+      } catch {
+        // Older streaming shape: scan SSE lines.
+        for (const line of raw.split("\n")) {
+          const data = line.startsWith("data:") ? line.slice(5).trim() : line.trim();
+          if (!data || data === "[DONE]") continue;
+          try {
+            imageUrl = findGeneratedImage(JSON.parse(data)) ?? imageUrl;
+          } catch {
+            // Ignore SSE metadata lines that are not JSON.
+          }
         }
       }
       if (!imageUrl) throw new Error("L’image n’a pas pu être récupérée. Réessayez.");
+
 
       const assistantMessage: UIMessage = {
         id: uid(),
