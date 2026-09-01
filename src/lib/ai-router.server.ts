@@ -7,7 +7,7 @@
  * Every key is read inside the functions (per-request env injection) and never leaves the server.
  */
 
-export type ProviderName = "openrouter" | "openai" | "google" | "anthropic";
+export type ProviderName = "openrouter" | "openai" | "google" | "anthropic" | "lovable";
 
 export type ChatPart = { type: "text"; text: string } | { type: "image"; mediaType: string; dataUrl: string };
 export type ChatMessage = { role: "user" | "assistant"; parts: ChatPart[] };
