@@ -38,17 +38,15 @@ export async function handleImageRequest(request: Request, options: { edit: bool
     if (request.headers.get("X-Elisee-Proxy") === "1") {
       return Response.json({ error: "Service de génération indisponible." }, { status: 503 });
     }
-    try {
-      return await fetch(FALLBACK_IMAGE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
-        body: JSON.stringify({ prompt }),
-        signal: AbortSignal.timeout(180_000),
-      });
-    } catch (error) {
-      console.error("[image] keyless fallback failed", error);
-      return Response.json({ error: "La génération d’image est momentanément indisponible." }, { status: 503 });
-    }
+    const hosted = await hostedImageFallback(prompt);
+    if (hosted) return hosted;
+    return Response.json(
+      {
+        error:
+          "Aucun moteur d’image n’est configuré sur ce déploiement. Ajoutez la variable d’environnement OPENROUTER_API_KEY (ou OPENAI_API_KEY / GOOGLE_AI_API_KEY) puis redéployez.",
+      },
+      { status: 503 },
+    );
   }
 
   try {
