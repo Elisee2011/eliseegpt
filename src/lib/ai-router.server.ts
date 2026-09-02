@@ -12,9 +12,6 @@ export type ProviderName = "openrouter" | "openai" | "google" | "anthropic" | "l
 export type ChatPart = { type: "text"; text: string } | { type: "image"; mediaType: string; dataUrl: string };
 export type ChatMessage = { role: "user" | "assistant"; parts: ChatPart[] };
 
-const CHAT_TIMEOUT_MS = 60_000;
-const IMAGE_TIMEOUT_MS = 180_000;
-
 type ProviderDef = {
   name: ProviderName;
   key: string;
@@ -214,7 +211,7 @@ export async function streamChat(system: string, messages: ChatMessage[]): Promi
   for (const provider of providers) {
     const [url, init] = chatRequest(provider, system, messages);
     try {
-      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(CHAT_TIMEOUT_MS) });
+      const response = await fetch(url, init);
       if (!response.ok || !response.body) {
         const detail = `HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`;
         console.error(`[ai-router] ${provider.name} chat unavailable: ${detail}`);
@@ -293,7 +290,6 @@ async function imageViaOpenAiCompatibleChat(
         },
       ],
     }),
-    signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
   const payload = (await response.json()) as unknown;
@@ -308,8 +304,7 @@ async function imageViaOpenAi(provider: ProviderDef, prompt: string, inputImages
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${provider.key}` },
       body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1024x1024", n: 1 }),
-      signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
-    });
+      });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const dataUrl = findImageDataUrl(await response.json());
     if (!dataUrl) throw new Error("no_image_in_response");
@@ -329,7 +324,6 @@ async function imageViaOpenAi(provider: ProviderDef, prompt: string, inputImages
     method: "POST",
     headers: { authorization: `Bearer ${provider.key}` },
     body: form,
-    signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const dataUrl = findImageDataUrl(await response.json());
@@ -349,8 +343,7 @@ async function imageViaGoogle(provider: ProviderDef, prompt: string, inputImages
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": provider.key },
       body: JSON.stringify({ contents: [{ role: "user", parts }] }),
-      signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
-    },
+      },
   );
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const dataUrl = findImageDataUrl(await response.json());
