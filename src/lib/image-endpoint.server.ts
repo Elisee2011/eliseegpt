@@ -3,6 +3,33 @@ import { AllProvidersFailedError, createImage } from "@/lib/ai-router.server";
 const MAX_INPUT_IMAGES = 4;
 const FALLBACK_IMAGE_URL = "https://eliseegpt.lovable.app/api/image";
 
+/**
+ * Calls the hosted Elisée GPT image service. Returns undefined when that
+ * service is unreachable or does not answer with a usable image payload
+ * (older deployments answer the HTML app shell with a 404).
+ */
+async function hostedImageFallback(prompt: string): Promise<Response | undefined> {
+  try {
+    const response = await fetch(FALLBACK_IMAGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
+      body: JSON.stringify({ prompt }),
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok || !contentType.includes("application/json")) {
+      console.error(`[image] hosted fallback unusable: HTTP ${response.status} ${contentType}`);
+      return undefined;
+    }
+    const payload = (await response.json()) as { imageUrl?: unknown };
+    if (typeof payload.imageUrl !== "string") return undefined;
+    return Response.json({ imageUrl: payload.imageUrl, provider: "hosted" });
+  } catch (error) {
+    console.error("[image] hosted fallback failed", error);
+    return undefined;
+  }
+}
+
+
 /** Shared handler for image generation and editing. No app credits or payment system is used. */
 export async function handleImageRequest(request: Request, options: { edit: boolean }) {
   let body: { prompt?: unknown; images?: unknown };
@@ -38,17 +65,15 @@ export async function handleImageRequest(request: Request, options: { edit: bool
     if (request.headers.get("X-Elisee-Proxy") === "1") {
       return Response.json({ error: "Service de génération indisponible." }, { status: 503 });
     }
-    try {
-      return await fetch(FALLBACK_IMAGE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
-        body: JSON.stringify({ prompt }),
-        signal: AbortSignal.timeout(180_000),
-      });
-    } catch (error) {
-      console.error("[image] keyless fallback failed", error);
-      return Response.json({ error: "La génération d’image est momentanément indisponible." }, { status: 503 });
-    }
+    const hosted = await hostedImageFallback(prompt);
+    if (hosted) return hosted;
+    return Response.json(
+      {
+        error:
+          "Aucun moteur d’image n’est configuré sur ce déploiement. Ajoutez la variable d’environnement OPENROUTER_API_KEY (ou OPENAI_API_KEY / GOOGLE_AI_API_KEY) puis redéployez.",
+      },
+      { status: 503 },
+    );
   }
 
   try {
@@ -58,16 +83,8 @@ export async function handleImageRequest(request: Request, options: { edit: bool
     if (error instanceof AllProvidersFailedError) {
       console.error("[image] all providers failed", error.attempts);
       if (!options.edit && images.length === 0 && request.headers.get("X-Elisee-Proxy") !== "1") {
-        try {
-          return await fetch(FALLBACK_IMAGE_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
-            body: JSON.stringify({ prompt }),
-            signal: AbortSignal.timeout(180_000),
-          });
-        } catch (fallbackError) {
-          console.error("[image] hosted fallback failed", fallbackError);
-        }
+        const hosted = await hostedImageFallback(prompt);
+        if (hosted) return hosted;
       }
       return Response.json({ error: "Aucun service d’image n’est disponible actuellement." }, { status: 503 });
     }

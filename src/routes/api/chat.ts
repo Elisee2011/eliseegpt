@@ -54,7 +54,6 @@ async function fallbackChat(request: Request, body: { messages: unknown; userPre
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(90_000),
     });
     return new Response(response.body, {
       status: response.status,

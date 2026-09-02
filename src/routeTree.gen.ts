@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiImageRouteImport } from './routes/api/image'
 import { Route as ApiImageEditRouteImport } from './routes/api/image-edit'
 import { Route as CConversationIdRouteImport } from './routes/c.$conversationId'
@@ -29,6 +30,11 @@ const AuthRoute = AuthRouteImport.update({
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiImageRoute = ApiImageRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/image': typeof ApiImageRoute
   '/api/image-edit': typeof ApiImageEditRoute
   '/c/$conversationId': typeof CConversationIdRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/image': typeof ApiImageRoute
   '/api/image-edit': typeof ApiImageEditRoute
   '/c/$conversationId': typeof CConversationIdRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/image': typeof ApiImageRoute
   '/api/image-edit': typeof ApiImageEditRoute
   '/c/$conversationId': typeof CConversationIdRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/api/chat'
+    | '/api/health'
     | '/api/image'
     | '/api/image-edit'
     | '/c/$conversationId'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/api/chat'
+    | '/api/health'
     | '/api/image'
     | '/api/image-edit'
     | '/c/$conversationId'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/api/chat'
+    | '/api/health'
     | '/api/image'
     | '/api/image-edit'
     | '/c/$conversationId'
@@ -103,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiImageRoute: typeof ApiImageRoute
   ApiImageEditRoute: typeof ApiImageEditRoute
   CConversationIdRoute: typeof CConversationIdRoute
@@ -129,6 +142,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat'
       fullPath: '/api/chat'
       preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/image': {
@@ -159,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiImageRoute: ApiImageRoute,
   ApiImageEditRoute: ApiImageEditRoute,
   CConversationIdRoute: CConversationIdRoute,
