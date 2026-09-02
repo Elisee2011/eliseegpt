@@ -348,25 +348,29 @@ function ChatWindow({
   onMessagesChangeRef.current = onMessagesChange;
   const lastSyncedRef = useRef<string>("");
 
-  const transport = useMemo(
+  // The Chat instance is created exactly once per mounted conversation
+  // (the parent remounts via `key`), so streaming updates can never recreate it.
+  const [chat] = useState(
     () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        headers: async () => await authHeaders(),
+      new Chat<UIMessage>({
+        id: conversationId ?? "guest",
+        messages: initialMessages,
+        transport: new DefaultChatTransport({
+          api: "/api/chat",
+          headers: async () => await authHeaders(),
+        }),
+        onError: (error) => {
+          const message = error.message.trim();
+          toast.error(message || "La réponse de l'IA a échoué. Réessayez.");
+        },
       }),
-    [],
   );
 
   const { messages, sendMessage, setMessages, status } = useChat({
-    id: conversationId ?? "guest",
-    messages: initialMessages,
-    transport,
-    onError: (error) => {
-      const message = error.message.trim();
-      toast.error(message || "La réponse de l'IA a échoué. Réessayez.");
-    },
-    onFinish: () => {},
+    chat,
+    throttle: 80,
   });
+
 
   useEffect(() => {
     if (messages.length === 0) return;
