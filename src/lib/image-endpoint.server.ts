@@ -83,16 +83,8 @@ export async function handleImageRequest(request: Request, options: { edit: bool
     if (error instanceof AllProvidersFailedError) {
       console.error("[image] all providers failed", error.attempts);
       if (!options.edit && images.length === 0 && request.headers.get("X-Elisee-Proxy") !== "1") {
-        try {
-          return await fetch(FALLBACK_IMAGE_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Elisee-Proxy": "1" },
-            body: JSON.stringify({ prompt }),
-            signal: AbortSignal.timeout(180_000),
-          });
-        } catch (fallbackError) {
-          console.error("[image] hosted fallback failed", fallbackError);
-        }
+        const hosted = await hostedImageFallback(prompt);
+        if (hosted) return hosted;
       }
       return Response.json({ error: "Aucun service d’image n’est disponible actuellement." }, { status: 503 });
     }
