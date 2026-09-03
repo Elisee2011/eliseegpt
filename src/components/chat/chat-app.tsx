@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useChat } from "@ai-sdk/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowUp, Download, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
@@ -373,12 +373,16 @@ function ChatWindow({
 
 
   useEffect(() => {
+    // Do not update the parent conversation on every streamed token. Doing so
+    // remounts a large part of the tree and can trigger React's update-depth
+    // protection on long answers. Persist the complete response once idle.
+    if (status === "submitted" || status === "streaming") return;
     if (messages.length === 0) return;
     const signature = JSON.stringify(messages);
     if (signature === lastSyncedRef.current) return;
     lastSyncedRef.current = signature;
     onMessagesChangeRef.current(messages);
-  }, [messages]);
+  }, [messages, status]);
 
   const busy = status === "submitted" || status === "streaming" || generatingImage;
 
