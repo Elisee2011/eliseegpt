@@ -218,3 +218,69 @@
     color: var(--color-muted-foreground);
   }
 }
+
+
+/* Minimalist Elisée GPT theme: light by default, #161869 as the brand accent. */
+:root:not(.dark) {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #171923;
+  --card: #ffffff;
+  --card-foreground: #171923;
+  --popover: #ffffff;
+  --popover-foreground: #171923;
+  --primary: #161869;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f3f8;
+  --secondary-foreground: #161869;
+  --muted: #f5f6fa;
+  --muted-foreground: #666b7a;
+  --accent: #ececff;
+  --accent-foreground: #161869;
+  --destructive: #c93636;
+  --destructive-foreground: #ffffff;
+  --border: #e5e7ef;
+  --input: #e0e3ed;
+  --ring: #161869;
+  --user-bubble: #161869;
+  --user-bubble-foreground: #ffffff;
+  --sidebar: #fafaff;
+  --sidebar-foreground: #20213b;
+  --sidebar-primary: #161869;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeeeF8;
+  --sidebar-accent-foreground: #161869;
+  --sidebar-border: #e6e7f0;
+  --sidebar-ring: #161869;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #10111b;
+  --foreground: #f5f6fc;
+  --card: #171925;
+  --card-foreground: #f5f6fc;
+  --popover: #171925;
+  --popover-foreground: #f5f6fc;
+  --primary: #161869;
+  --primary-foreground: #ffffff;
+  --secondary: #242638;
+  --secondary-foreground: #f5f6fc;
+  --muted: #222436;
+  --muted-foreground: #a8adbf;
+  --accent: #282a45;
+  --accent-foreground: #ffffff;
+  --border: #303246;
+  --input: #303246;
+  --ring: #6669ce;
+  --user-bubble: #161869;
+  --user-bubble-foreground: #ffffff;
+  --sidebar: #0c0d15;
+  --sidebar-foreground: #f5f6fc;
+  --sidebar-primary: #161869;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #222337;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #26283a;
+  --sidebar-ring: #6669ce;
+}
