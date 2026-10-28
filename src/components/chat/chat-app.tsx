@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Chat, useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowUp, Download, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X } from "lucide-react";
+import { ArrowUp, Download, LogOut, MessageSquarePlus, PanelLeft, Paperclip, Trash2, X, Moon, Sun } from "lucide-react";
 import logoMark from "@/assets/elisee-gpt-mark.png.asset.json";
 import { authHeaders } from "@/lib/auth-headers";
 import { toast } from "sonner";
@@ -20,6 +20,26 @@ type Conversation = {
 };
 
 const STORAGE_KEY = "elisee-gpt-conversations";
+const THEME_KEY = "elisee-gpt-theme";
+
+declare global {
+  interface Window {
+    puter?: { ai: { chat: (prompt: unknown, options?: { model?: string }) => Promise<unknown> } };
+  }
+}
+
+function responseText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (!result || typeof result !== "object") return "";
+  const record = result as Record<string, unknown>;
+  const message = record.message as Record<string, unknown> | undefined;
+  if (typeof message?.content === "string") return message.content;
+  if (Array.isArray(message?.content)) {
+    return message.content.map((part) => part && typeof part === "object" && "text" in part ? String((part as { text: unknown }).text) : "").join("");
+  }
+  if (typeof record.text === "string") return record.text;
+  return "";
+}
 
 function loadConversations(): Conversation[] {
   if (typeof window === "undefined") return [];
@@ -120,6 +140,23 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    const initialTheme = savedTheme === "dark" ? "dark" : "light";
+    setTheme(initialTheme);
+    document.documentElement.classList.toggle("dark", initialTheme === "dark");
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((currentTheme) => {
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
+      document.documentElement.classList.toggle("dark", nextTheme === "dark");
+      localStorage.setItem(THEME_KEY, nextTheme);
+      return nextTheme;
+    });
+  };
 
   useEffect(() => {
     setConversations(loadConversations());
@@ -322,6 +359,8 @@ export function ChatApp({ conversationId }: { conversationId: string | null }) {
           }));
         }}
         onSignIn={signIn}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
     </div>
   );
@@ -332,15 +371,20 @@ function ChatWindow({
   initialMessages,
   onMessagesChange,
   onSignIn,
+  theme,
+  onToggleTheme,
 }: {
   conversationId: string | null;
   initialMessages: UIMessage[];
   onMessagesChange: (messages: UIMessage[]) => void;
   onSignIn: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [generatingImage, setGeneratingImage] = useState(false);
+  const [puterBusy, setPuterBusy] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -384,7 +428,7 @@ function ChatWindow({
     onMessagesChangeRef.current(messages);
   }, [messages, status]);
 
-  const busy = status === "submitted" || status === "streaming" || generatingImage;
+  const busy = status === "submitted" || status === "streaming" || generatingImage || puterBusy;
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -464,7 +508,46 @@ function ChatWindow({
       url: attachment.url,
     }));
     setAttachments([]);
-    void sendMessage({ text, files });
+    if (files.length > 0) {
+      void sendMessage({ text, files });
+      return;
+    }
+
+    const userMessage: UIMessage = {
+      id: uid(),
+      role: "user",
+      parts: [{ type: "text", text }],
+    };
+    const history = [...messages, userMessage]
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        role: message.role,
+        content: textOf(message),
+      }))
+      .filter((message) => message.content.length > 0)
+      .slice(-20);
+    setMessages((previous) => [...previous, userMessage]);
+    setPuterBusy(true);
+    void (async () => {
+      try {
+        if (!window.puter?.ai?.chat) {
+          throw new Error("Puter n’a pas fini de charger. Actualisez la page et réessayez.");
+        }
+        const result = await window.puter.ai.chat(history, { model: "gpt-4o-mini" });
+        const answer = responseText(result).trim();
+        if (!answer) throw new Error("Puter n’a renvoyé aucune réponse. Réessayez.");
+        const assistantMessage: UIMessage = {
+          id: uid(),
+          role: "assistant",
+          parts: [{ type: "text", text: answer }],
+        };
+        setMessages((previous) => [...previous, assistantMessage]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "La réponse de l’IA a échoué.");
+      } finally {
+        setPuterBusy(false);
+      }
+    })();
   };
 
   const addFiles = async (files: FileList | File[] | null) => {
@@ -498,9 +581,15 @@ function ChatWindow({
           <img src={logoMark.url} alt="Elisée GPT" className="size-6" width={24} height={24} />
           <span className="font-display font-semibold">Elisée GPT</span>
         </div>
-        <p className="ml-auto text-xs text-muted-foreground">
+        <p className="ml-auto mr-3 hidden text-xs text-muted-foreground sm:block">
           Discussions sauvegardées sur cet appareil
         </p>
+        <Button type="button" variant="outline" size="icon" className="size-9 rounded-xl"
+          onClick={onToggleTheme}
+          title={theme === "dark" ? "Passer au mode clair" : "Passer au mode sombre"}
+          aria-label={theme === "dark" ? "Passer au mode clair" : "Passer au mode sombre"}>
+          {theme === "dark" ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />}
+        </Button>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
@@ -581,7 +670,7 @@ function ChatWindow({
             );
           })}
 
-          {status === "submitted" && (
+          {(status === "submitted" || puterBusy) && (
             <div className="flex gap-1.5 pl-1">
               <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.2s]" />
               <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.1s]" />
