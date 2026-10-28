@@ -24,7 +24,7 @@ const THEME_KEY = "elisee-gpt-theme";
 
 declare global {
   interface Window {
-    puter?: { ai: { chat: (prompt: unknown, options?: { model?: string }) => Promise<unknown> } };
+    puter?: { ai: { chat: (prompt: unknown, options?: { model?: string; normalize?: boolean }) => Promise<unknown> } };
   }
 }
 
@@ -526,16 +526,27 @@ function ChatWindow({
       }))
       .filter((message) => message.content.length > 0)
       .slice(-20);
+    const prompt = [
+      {
+        role: "system",
+        content:
+          "Tu es Elisée GPT, un assistant IA utile, fiable et clair. Réponds naturellement dans la langue utilisée par l’utilisateur, surtout en français. Pour les devoirs, explique les étapes de façon pédagogique. N’invente pas des faits : signale clairement les incertitudes. Sois concis lorsque la question est simple.",
+      },
+      ...history,
+    ];
     setMessages((previous) => [...previous, userMessage]);
     setPuterBusy(true);
     void (async () => {
       try {
         if (!window.puter?.ai?.chat) {
-          throw new Error("Puter n’a pas fini de charger. Actualisez la page et réessayez.");
+          throw new Error("Le service IA est encore en chargement. Actualise la page et réessaie.");
         }
-        const result = await window.puter.ai.chat(history, { model: "gpt-4o-mini" });
+        const result = await window.puter.ai.chat(prompt, {
+          model: "gpt-5.6-luna",
+          normalize: true,
+        });
         const answer = responseText(result).trim();
-        if (!answer) throw new Error("Puter n’a renvoyé aucune réponse. Réessayez.");
+        if (!answer) throw new Error("L’IA n’a renvoyé aucune réponse. Réessaie.");
         const assistantMessage: UIMessage = {
           id: uid(),
           role: "assistant",
